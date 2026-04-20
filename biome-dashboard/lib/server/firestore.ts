@@ -58,7 +58,11 @@ export async function createDoc(
   id?: string
 ): Promise<string> {
   const now = new Date().toISOString();
-  const body = { ...payload, createdAt: now, updatedAt: now };
+  const body = {
+    ...payload,
+    createdAt: typeof payload.createdAt === "string" ? payload.createdAt : now,
+    updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : now,
+  };
   if (id) {
     await db().collection(path).doc(id).set(body);
     return id;
@@ -69,6 +73,24 @@ export async function createDoc(
 
 export async function deleteDoc(path: string, id: string): Promise<void> {
   await db().collection(path).doc(id).delete();
+}
+
+export async function listDocIds(path: string): Promise<string[]> {
+  const snap = await db().collection(path).select().get();
+  return snap.docs.map((doc) => doc.id);
+}
+
+export async function deleteManyDocs(path: string, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const firestore = db();
+  const batchSize = 400;
+  for (let index = 0; index < ids.length; index += batchSize) {
+    const batch = firestore.batch();
+    for (const id of ids.slice(index, index + batchSize)) {
+      batch.delete(firestore.collection(path).doc(id));
+    }
+    await batch.commit();
+  }
 }
 
 export async function countCollection(path: string, where?: { field: string; op: FirebaseFirestore.WhereFilterOp; value: unknown }[]): Promise<number> {

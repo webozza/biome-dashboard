@@ -16,6 +16,8 @@ interface DataTableProps<T> {
   totalPages: number;
   onPageChange: (page: number) => void;
   totalItems?: number;
+  pageSize?: number;
+  hasNextPage?: boolean;
   selectedItems?: string[];
   onToggleItem?: (id: string) => void;
   onSelectAll?: (ids: string[]) => void;
@@ -32,6 +34,8 @@ export function DataTable<T>({
   totalPages,
   onPageChange,
   totalItems,
+  pageSize = 10,
+  hasNextPage,
   selectedItems = [],
   onToggleItem,
   onSelectAll,
@@ -44,6 +48,9 @@ export function DataTable<T>({
     getId && data.length > 0 && data.every((item) => selectedItems.includes(getId(item)));
 
   const itemCount = totalItems ?? data.length;
+  const isCursorPagination = typeof hasNextPage === "boolean";
+  const canGoPrev = currentPage > 1;
+  const canGoNext = isCursorPagination ? hasNextPage : currentPage < totalPages;
 
   return (
     <div className="table-container animate-fade-in pb-2">
@@ -161,7 +168,7 @@ export function DataTable<T>({
             <div className="px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/5 shadow-inner">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted">
                 Indices <span className="text-primary italic mx-1">
-                  {Math.min((currentPage - 1) * 10 + 1, itemCount)}-{Math.min(currentPage * 10, itemCount)}
+                  {Math.min((currentPage - 1) * pageSize + 1, itemCount)}-{Math.min(currentPage * pageSize, itemCount)}
                 </span> / <span className="text-main">{itemCount}</span> Total
               </p>
             </div>
@@ -173,43 +180,63 @@ export function DataTable<T>({
           </div>
 
           <div className="flex items-center gap-2">
-            <PaginationBtn onClick={() => onPageChange(1)} disabled={currentPage <= 1}>
-              <ChevronsLeft className="w-4 h-4" />
-            </PaginationBtn>
-            <PaginationBtn onClick={() => onPageChange(currentPage - 1)} disabled={currentPage <= 1}>
-              <ChevronLeft className="w-4 h-4" />
-            </PaginationBtn>
+            {isCursorPagination ? (
+              <>
+                <PaginationBtn onClick={() => onPageChange(currentPage - 1)} disabled={!canGoPrev}>
+                  <ChevronLeft className="w-4 h-4" />
+                </PaginationBtn>
 
-            <div className="flex items-center bg-white/[0.03] rounded-xl border border-white/5 p-1 mx-2">
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                let page: number;
-                if (totalPages <= 5) page = i + 1;
-                else if (currentPage <= 3) page = i + 1;
-                else if (currentPage >= totalPages - 2) page = totalPages - 4 + i;
-                else page = currentPage - 2 + i;
-                
-                return (
-                  <button
-                    key={page}
-                    onClick={() => onPageChange(page)}
-                    className={`w-9 h-9 rounded-lg text-[11px] font-black uppercase tracking-tighter transition-all duration-300 ${
-                      page === currentPage 
-                        ? "bg-primary text-white shadow-lg shadow-emerald-500/20 scale-105" 
-                        : "text-muted hover:text-main hover:bg-white/5"
-                    }`}
-                  >
-                    {String(page).padStart(2, '0')}
-                  </button>
-                );
-              })}
-            </div>
+                <div className="flex items-center bg-white/[0.03] rounded-xl border border-white/5 px-4 h-11 mx-2">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-main">
+                    Page {String(currentPage).padStart(2, "0")}
+                  </span>
+                </div>
 
-            <PaginationBtn onClick={() => onPageChange(currentPage + 1)} disabled={currentPage >= totalPages}>
-              <ChevronRight className="w-4 h-4" />
-            </PaginationBtn>
-            <PaginationBtn onClick={() => onPageChange(totalPages)} disabled={currentPage >= totalPages}>
-              <ChevronsRight className="w-4 h-4" />
-            </PaginationBtn>
+                <PaginationBtn onClick={() => onPageChange(currentPage + 1)} disabled={!canGoNext}>
+                  <ChevronRight className="w-4 h-4" />
+                </PaginationBtn>
+              </>
+            ) : (
+              <>
+                <PaginationBtn onClick={() => onPageChange(1)} disabled={!canGoPrev}>
+                  <ChevronsLeft className="w-4 h-4" />
+                </PaginationBtn>
+                <PaginationBtn onClick={() => onPageChange(currentPage - 1)} disabled={!canGoPrev}>
+                  <ChevronLeft className="w-4 h-4" />
+                </PaginationBtn>
+
+                <div className="flex items-center bg-white/[0.03] rounded-xl border border-white/5 p-1 mx-2">
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let page: number;
+                    if (totalPages <= 5) page = i + 1;
+                    else if (currentPage <= 3) page = i + 1;
+                    else if (currentPage >= totalPages - 2) page = totalPages - 4 + i;
+                    else page = currentPage - 2 + i;
+
+                    return (
+                      <button
+                        key={page}
+                        onClick={() => onPageChange(page)}
+                        className={`w-9 h-9 rounded-lg text-[11px] font-black uppercase tracking-tighter transition-all duration-300 ${
+                          page === currentPage
+                            ? "bg-primary text-white shadow-lg shadow-emerald-500/20 scale-105"
+                            : "text-muted hover:text-main hover:bg-white/5"
+                        }`}
+                      >
+                        {String(page).padStart(2, "0")}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <PaginationBtn onClick={() => onPageChange(currentPage + 1)} disabled={!canGoNext}>
+                  <ChevronRight className="w-4 h-4" />
+                </PaginationBtn>
+                <PaginationBtn onClick={() => onPageChange(totalPages)} disabled={!canGoNext}>
+                  <ChevronsRight className="w-4 h-4" />
+                </PaginationBtn>
+              </>
+            )}
           </div>
         </div>
       )}

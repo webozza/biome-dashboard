@@ -1,7 +1,12 @@
 "use client";
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
+  draft: { bg: "bg-slate-500/10", text: "text-slate-400", dot: "bg-slate-400" },
+  submitted: { bg: "bg-cyan-500/10", text: "text-cyan-400", dot: "bg-cyan-400" },
   pending: { bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400", dot: "bg-amber-500" },
+  pending_admin_review: { bg: "bg-amber-500/10", text: "text-amber-400", dot: "bg-amber-400" },
+  pending_tagged_user: { bg: "bg-orange-500/10", text: "text-orange-400", dot: "bg-orange-400" },
+  pending_voting: { bg: "bg-violet-500/10", text: "text-violet-400", dot: "bg-violet-400" },
   approved: { bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
   rejected: { bg: "bg-red-500/10", text: "text-red-600 dark:text-red-400", dot: "bg-red-500" },
   removed: { bg: "bg-gray-500/10", text: "text-gray-600 dark:text-gray-400", dot: "bg-gray-500" },
@@ -26,6 +31,18 @@ const statusConfig: Record<string, { bg: string; text: string; dot: string }> = 
   flagged: { bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400", dot: "bg-amber-500" },
   warning: { bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400", dot: "bg-amber-500" },
   active: { bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+  own: { bg: "bg-sky-500/10", text: "text-sky-400", dot: "bg-sky-400" },
+  duality: { bg: "bg-fuchsia-500/10", text: "text-fuchsia-400", dot: "bg-fuchsia-400" },
+  instagram: { bg: "bg-rose-500/10", text: "text-rose-400", dot: "bg-rose-400" },
+  tiktok: { bg: "bg-white/5", text: "text-white", dot: "bg-white" },
+  youtube: { bg: "bg-red-500/10", text: "text-red-400", dot: "bg-red-400" },
+  facebook: { bg: "bg-blue-500/10", text: "text-blue-400", dot: "bg-blue-400" },
+  note_added: { bg: "bg-cyan-500/10", text: "text-cyan-400", dot: "bg-cyan-400" },
+  status_changed: { bg: "bg-blue-500/10", text: "text-blue-400", dot: "bg-blue-400" },
+  tagged_user_action: { bg: "bg-orange-500/10", text: "text-orange-400", dot: "bg-orange-400" },
+  voting_opened: { bg: "bg-violet-500/10", text: "text-violet-400", dot: "bg-violet-400" },
+  voting_closed: { bg: "bg-zinc-500/10", text: "text-zinc-400", dot: "bg-zinc-400" },
+  notification_sent: { bg: "bg-cyan-500/10", text: "text-cyan-400", dot: "bg-cyan-400" },
 };
 
 const fallback = { bg: "bg-gray-500/10", text: "text-gray-600 dark:text-gray-400", dot: "bg-gray-400" };

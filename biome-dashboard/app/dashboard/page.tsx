@@ -11,13 +11,10 @@ import {
   XCircle,
   AlertTriangle,
   TrendingUp,
-  TrendingDown,
   Vote,
-  Bell,
   ArrowUpRight,
 } from "lucide-react";
 import {
-  LineChart,
   Line,
   XAxis,
   YAxis,
@@ -27,8 +24,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  BarChart,
-  Bar,
   Legend,
   Area,
   AreaChart,
@@ -37,14 +32,13 @@ import {
   dashboardStats,
   requestVolumeData,
   statusBreakdownData,
-  approvalTrendData,
-  votingDistributionData,
   recentActivities,
   flaggedItems,
   verificationRequests,
   dualityRequests,
   votingItems,
 } from "@/lib/data/mock-data";
+import { getBmidBoxSummary } from "@/lib/data/bmid-box";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { MetricCard } from "@/components/ui/metric-card";
 
@@ -93,6 +87,8 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 export default function DashboardPage() {
+  const bmidBoxSummary = getBmidBoxSummary();
+
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Page Title */}
@@ -131,6 +127,34 @@ export default function DashboardPage() {
             trend={card.trend}
           />
         ))}
+      </div>
+
+      <div className="card p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="font-extrabold tracking-tight text-main">BMID Box Summary</h3>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
+              Requested top-line queue counts for admin dashboard
+            </p>
+          </div>
+          <Box className="h-5 w-5 text-primary" />
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-7">
+          {[
+            ["Total Box requests", bmidBoxSummary.total],
+            ["Pending admin review", bmidBoxSummary.pendingAdminReview],
+            ["Pending tagged user", bmidBoxSummary.pendingTaggedUser],
+            ["Pending voting", bmidBoxSummary.pendingVoting],
+            ["Approved", bmidBoxSummary.approved],
+            ["Refused", bmidBoxSummary.refused],
+            ["Removed", bmidBoxSummary.removed],
+          ].map(([label, value]) => (
+            <div key={String(label)} className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.15em] text-muted">{label}</p>
+              <p className="mt-3 text-3xl font-extrabold tracking-tight text-main">{value}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Charts Row 1: Area Line + Donut */}

@@ -17,6 +17,7 @@ import {
   LogOut,
   ChevronLeft,
   Hexagon,
+  ArrowRightLeft,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useDashboardStore } from "@/lib/stores/dashboard-store";
@@ -33,7 +34,7 @@ const navSections = [
     items: [
       { href: "/dashboard/verification", label: "Verification", icon: ShieldCheck },
       { href: "/dashboard/content", label: "BMID Content", icon: FileText },
-      { href: "/dashboard/box", label: "BMID Box", icon: Box },
+      { href: "/dashboard/bmid-box", label: "BMID Box", icon: Box },
       { href: "/dashboard/duality", label: "Duality", icon: GitBranch },
     ],
   },
@@ -41,6 +42,9 @@ const navSections = [
     label: "Monitoring",
     items: [
       { href: "/dashboard/voting", label: "Voting", icon: Vote },
+      { href: "/dashboard/bmid/transfer", label: "Transfer Flow", icon: ArrowRightLeft },
+      { href: "/dashboard/bmid/respond", label: "Tagged Response", icon: GitBranch },
+      { href: "/dashboard/bmid/vote", label: "Vote Recorder", icon: Vote },
       { href: "/dashboard/moderation", label: "Moderation", icon: AlertTriangle },
       { href: "/dashboard/users", label: "Users", icon: Users },
     ],
@@ -62,17 +66,20 @@ export function Sidebar() {
   const { sidebarOpen, toggleSidebar } = useDashboardStore();
 
   return (
-    <aside className={`sidebar flex flex-col transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${!sidebarOpen ? "w-[80px]" : "w-[260px]"} bg-[#080808] border-r border-white/5 relative z-40`}>
+    <aside
+      className={`sidebar flex flex-col transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${!sidebarOpen ? "w-[80px]" : "w-[260px]"} border-r border-border relative z-40`}
+      style={{ backgroundColor: "var(--sidebar-bg)" }}
+    >
       {/* Branding Node */}
-      <div className="h-[80px] flex items-center px-6 border-b border-white/5 relative overflow-hidden">
+      <div className="h-[80px] flex items-center px-6 border-b border-border relative overflow-hidden">
         <div className="absolute inset-0 bg-primary/5 blur-xl opacity-20" />
         <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary via-emerald-700 to-emerald-900 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/10 ring-1 ring-white/10 z-10 transition-transform hover:scale-105 active:scale-95 cursor-pointer">
           <Hexagon className="w-5.5 h-5.5 text-white" strokeWidth={2.5} />
         </div>
-        
+
         {sidebarOpen && (
           <div className="ml-4 flex flex-col animate-fade-in z-10">
-            <span className="font-black text-lg tracking-tighter text-white uppercase italic">
+            <span className="font-black text-lg tracking-tighter text-main uppercase italic">
               BIOME<span className="text-primary tracking-[0.2em] ml-1">ADMIN</span>
             </span>
             <span className="text-[8px] font-black tracking-[0.4em] uppercase text-muted leading-none -mt-0.5 opacity-50">Core Terminal</span>
@@ -81,7 +88,7 @@ export function Sidebar() {
 
         <button
           onClick={toggleSidebar}
-          className={`ml-auto p-2 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all group z-10 ${sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+          className={`ml-auto p-2 rounded-xl border border-border bg-surface hover:bg-surface-hover transition-all group z-10 ${sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
         >
           <ChevronLeft className={`w-3.5 h-3.5 text-muted group-hover:text-primary transition-transform ${sidebarOpen ? "" : "rotate-180"}`} />
         </button>
@@ -90,7 +97,8 @@ export function Sidebar() {
       {!sidebarOpen && (
         <button
           onClick={toggleSidebar}
-          className="absolute right-[-14px] top-[100px] w-7 h-7 bg-primary rounded-full flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 hover:scale-110 active:scale-95 transition-all z-50 border-2 border-[#080808]"
+          className="absolute right-[-14px] top-[100px] w-7 h-7 bg-primary rounded-full flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 hover:scale-110 active:scale-95 transition-all z-50 border-2"
+          style={{ borderColor: "var(--sidebar-bg)" }}
         >
           <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
         </button>
@@ -123,9 +131,9 @@ export function Sidebar() {
                     key={item.href}
                     href={item.href}
                     className={`nav-link h-[48px] px-3 rounded-xl flex items-center relative transition-all duration-300 group
-                      ${isActive 
-                        ? "bg-primary/10 text-primary font-black shadow-[inset_0_0_15px_rgba(16,185,129,0.05)]" 
-                        : "text-muted hover:text-white hover:bg-white/[0.03]"
+                      ${isActive
+                        ? "bg-primary/10 text-primary font-black shadow-[inset_0_0_15px_rgba(16,185,129,0.05)]"
+                        : "text-muted hover:text-main hover:bg-surface-hover"
                       }
                     `}
                   >
@@ -155,8 +163,8 @@ export function Sidebar() {
       </nav>
 
       {/* Terminal Node / Identity */}
-      <div className="p-4 bg-black/40 border-t border-white/5">
-        <div className={`flex items-center gap-3 p-3 rounded-2xl border border-white/5 bg-white/[0.02] group transition-all ${sidebarOpen ? "hover:border-white/10" : "flex-col p-2"}`}>
+      <div className="p-4 border-t border-border" style={{ backgroundColor: "var(--sidebar-footer-bg)" }}>
+        <div className={`flex items-center gap-3 p-3 rounded-2xl border border-border bg-surface group transition-all ${sidebarOpen ? "hover:border-border" : "flex-col p-2"}`}>
           <div className="relative">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-surface to-background flex items-center justify-center text-primary font-black text-xs border border-border group-hover:border-primary/50 transition-colors shadow-inner ring-1 ring-white/5 overflow-hidden uppercase">
               {user?.photoURL ? (
@@ -166,13 +174,16 @@ export function Sidebar() {
                 user?.name?.charAt(0) || "R"
               )}
             </div>
-            <div className="absolute bottom-[-1px] right-[-1px] w-3 h-3 bg-primary rounded-full border-2 border-[#080808] shadow-[0_0_8px_var(--primary)]" />
+            <div
+              className="absolute bottom-[-1px] right-[-1px] w-3 h-3 bg-primary rounded-full border-2 shadow-[0_0_8px_var(--primary)]"
+              style={{ borderColor: "var(--sidebar-bg)" }}
+            />
           </div>
-          
+
           {sidebarOpen ? (
             <div className="flex-1 min-w-0 animate-fade-in">
-              <p className="text-[10px] font-black uppercase text-white tracking-tight truncate leading-none mb-1">{user?.name || "Admin Authority"}</p>
-              <p className="text-[9px] font-bold text-muted truncate italic opacity-50">{user?.email || "root@biome.io"}</p>
+              <p className="text-[10px] font-black uppercase text-main tracking-tight truncate leading-none mb-1">{user?.name || "Admin Authority"}</p>
+              <p className="text-[9px] font-bold text-muted truncate italic opacity-70">{user?.email || "root@biome.io"}</p>
             </div>
           ) : null}
 

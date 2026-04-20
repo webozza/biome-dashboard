@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bell, Search, User, LogOut, Settings, Shield, ChevronDown, UserCircle } from "lucide-react";
+import { Bell, Search, User, LogOut, Settings, Shield, ChevronDown, UserCircle, Sun, Moon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { useThemeStore } from "@/lib/stores/theme-store";
 import { recentActivities } from "@/lib/data/mock-data";
 
 const notifications = recentActivities.slice(0, 5).map((a) => ({
@@ -27,6 +28,8 @@ export function Header() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const theme = useThemeStore((s) => s.theme);
+  const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [readNotifs, setReadNotifs] = useState<string[]>([]);
@@ -66,6 +69,15 @@ export function Header() {
       <div className="flex items-center gap-5">
         {/* Global Utilities */}
         <div className="flex items-center bg-surface p-1 rounded-xl border border-border shadow-sm">
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="p-2 rounded-lg hover:bg-surface-hover transition-all text-muted hover:text-primary"
+          >
+            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
           {/* Notifications Trigger */}
           <div ref={notifRef} className="relative">
             <button

@@ -1,6 +1,47 @@
 @import "tailwindcss";
 
+/* Light mode (default) — minimal, neutral, high contrast */
 @theme {
+  --color-primary: #059669;
+  --color-primary-hover: #047857;
+  --color-background: #ffffff;
+  --color-surface: #fafafa;
+  --color-surface-hover: #f4f4f5;
+  --color-border: #e5e5e5;
+  --color-main: #171717;
+  --color-muted: #737373;
+}
+
+:root {
+  --primary: #059669;
+  --primary-hover: #047857;
+  --primary-soft: rgba(5, 150, 105, 0.06);
+  --background: #ffffff;
+  --surface: #fafafa;
+  --surface-hover: #f4f4f5;
+  --border: #e5e5e5;
+  --border-focus: rgba(5, 150, 105, 0.3);
+  --text-main: #171717;
+  --text-muted: #737373;
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --accent-shadow: none;
+
+  --glass: rgba(0, 0, 0, 0.02);
+  --glass-border: #e5e5e5;
+
+  --input-bg: #ffffff;
+  --input-border: #e5e5e5;
+  --input-focus: #059669;
+
+  --sidebar-bg: #ffffff;
+  --sidebar-footer-bg: #fafafa;
+  --hairline: #eeeeee;
+  --overlay-weak: rgba(0, 0, 0, 0.02);
+  --overlay-strong: rgba(0, 0, 0, 0.04);
+}
+
+/* Dark mode — overrides both @theme tokens and plain vars via cascade */
+.dark {
   --color-primary: #10b981;
   --color-primary-hover: #059669;
   --color-background: #050505;
@@ -9,9 +50,7 @@
   --color-border: rgba(255, 255, 255, 0.08);
   --color-main: #ffffff;
   --color-muted: #888888;
-}
 
-:root {
   --primary: #10b981;
   --primary-hover: #059669;
   --primary-soft: rgba(16, 185, 129, 0.1);
@@ -25,14 +64,18 @@
   --card-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.5);
   --accent-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.3);
 
-  /* Glassmorphism */
   --glass: rgba(255, 255, 255, 0.02);
   --glass-border: rgba(255, 255, 255, 0.05);
 
-  /* Inputs */
   --input-bg: #050505;
   --input-border: rgba(255, 255, 255, 0.1);
   --input-focus: #10b981;
+
+  --sidebar-bg: #080808;
+  --sidebar-footer-bg: rgba(0, 0, 0, 0.4);
+  --hairline: rgba(255, 255, 255, 0.05);
+  --overlay-weak: rgba(255, 255, 255, 0.03);
+  --overlay-strong: rgba(255, 255, 255, 0.06);
 }
 
 @layer base {
@@ -41,32 +84,40 @@
     @apply bg-background text-main selection:bg-primary/30 selection:text-white h-full w-full;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+
+  /* Smooth theme transitions — only color-related props so transforms/animations stay snappy */
+  html, body, aside, header, main, section, div, nav, button, a, input, textarea, select, span, p, h1, h2, h3, h4, h5, h6, li, table, thead, tbody, tr, td, th, kbd {
+    transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+    transition-duration: 260ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html, body, aside, header, main, section, div, nav, button, a, input, textarea, select, span, p, h1, h2, h3, h4, h5, h6, li, table, thead, tbody, tr, td, th, kbd {
+      transition-duration: 0ms;
+    }
+  }
 }
 
 @layer components {
-  /* Premium Input Architecture */
   .input-premium {
-    @apply bg-background border border-border rounded-xl px-4 py-2.5 
+    @apply bg-background border border-border rounded-xl px-4 py-2.5
     text-sm font-bold tracking-tight text-main placeholder:text-muted/30
     transition-all duration-300 outline-none
-    focus:border-primary/50 focus:ring-4 focus:ring-primary/5
-    hover:border-white/20 shadow-inner;
+    focus:border-primary/60 focus:ring-2 focus:ring-primary/10
+    hover:border-muted/40;
   }
 
-  /* Refined Navigation */
   .sidebar { @apply h-screen sticky top-0 flex flex-col; }
   .topbar { @apply h-[80px] sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border; }
-  
-  /* Link Styling */
+
   .nav-link { @apply flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300; }
-  
-  /* Base Card System */
+
   .card {
-    @apply bg-surface border border-border rounded-2xl p-6 transition-all duration-500 hover:border-white/10;
+    @apply bg-surface border border-border rounded-2xl p-6 transition-all duration-300 hover:border-muted/30;
     box-shadow: var(--card-shadow);
   }
 
-  /* Action Buttons */
   .btn-premium {
     @apply relative overflow-hidden px-6 py-3 rounded-xl text-xs font-black uppercase tracking-[0.2em]
     transition-all duration-300 active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none;
@@ -82,7 +133,7 @@
   }
 
   .btn-secondary {
-    @apply bg-white/5 border border-white/10 text-muted hover:bg-white/10 hover:text-white hover:border-white/20 shadow-sm;
+    @apply bg-surface border border-border text-muted hover:bg-surface-hover hover:text-main shadow-sm;
   }
 
   .btn-action {
@@ -90,7 +141,6 @@
     transition-all hover:bg-surface-hover active:scale-95;
   }
 
-  /* Table Elite Styling */
   .table-container {
     @apply overflow-hidden rounded-2xl border border-border bg-surface shadow-xl;
   }
@@ -111,22 +161,19 @@
     @apply py-4 px-6 text-sm font-medium text-main;
   }
 
-  /* Scrollbar Aesthetics */
   .custom-scrollbar::-webkit-scrollbar { width: 4px; }
   .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--overlay-strong);
     border-radius: 10px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--primary); }
 
-  /* Interactive Elements */
   .detail-pane {
-    @apply bg-background/40 backdrop-blur-3xl border-l border-white/10 shadow-2xl;
+    @apply bg-background/40 backdrop-blur-3xl border-l border-border shadow-2xl;
   }
 }
 
-/* Animations */
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-4px); }

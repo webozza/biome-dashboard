@@ -11,6 +11,8 @@ export interface User {
   createdAt: string;
 }
 
+export type AccountType = "personal" | "creator" | "brand" | "entertainment";
+
 export interface VerificationRequest {
   id: string;
   userId: string;
@@ -18,13 +20,26 @@ export interface VerificationRequest {
   email: string;
   socialAccount: string;
   platform: string;
-  documentUrl: string;
+  documentUrl?: string | null;
   status: "pending" | "approved" | "rejected" | "removed" | "appealed";
   adminNote: string | null;
   rejectionReason: string | null;
   createdAt: string;
   updatedAt: string;
   reviewedBy: string | null;
+  profileUrl?: string | null;
+  displayName?: string | null;
+  accountType?: AccountType | null;
+  verificationReason?: string | null;
+  activeOneYear?: boolean | null;
+  representsRealIdentity?: boolean | null;
+  screenshotUrl?: string | null;
+  agreementAccepted?: boolean | null;
+  followerCount?: number | null;
+  contentCategory?: string | null;
+  country?: string | null;
+  contactEmail?: string | null;
+  bmidNumber?: string | null;
 }
 
 export interface ContentRequest {

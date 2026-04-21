@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { admin, db } from "@/lib/server/firebase";
 import { computeVotingOutcome, syncVotingToContent } from "@/lib/server/bmid";
 import type { VotingItemDoc } from "@/lib/server/bmid";
-import { getDoc } from "@/lib/server/firestore";
+import { castBmidBoxVote } from "@/lib/server/bmid-box";
+import { getDoc, updateDoc } from "@/lib/server/firestore";
 import { guard } from "@/lib/server/guard";
 import { error, json } from "@/lib/server/response";
 
@@ -31,9 +32,44 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const userSnap = await db().collection("users").doc(actorUserId).get();
   if (!userSnap.exists) return error("user_not_found", 404);
-  const userData = userSnap.data() as { verified?: unknown; bmidNumber?: unknown } | undefined;
+  const userData = userSnap.data() as { verified?: unknown; bmidNumber?: unknown; name?: unknown; displayName?: unknown } | undefined;
   const isVerified = userData?.verified === true || typeof userData?.bmidNumber === "string";
   if (!isVerified) return error("not_verified", 403);
+
+  const boxSnap = await db().collection("bmidBoxRequests").doc(id).get();
+  if (boxSnap.exists) {
+    const voterName =
+      (typeof userData?.name === "string" && userData.name) ||
+      (typeof userData?.displayName === "string" && userData.displayName) ||
+      actorEmail ||
+      "Verified voter";
+    const result = await castBmidBoxVote(id, {
+      voterUserId: actorUserId,
+      voterName,
+      voteType: decision,
+    });
+    if (!result.ok) {
+      const status =
+        result.reason === "not_found" ? 404 : result.reason === "already_voted" ? 409 : 400;
+      return error(result.reason, status);
+    }
+    const fresh = result.request;
+    const previewTitle = fresh.previewData?.title || "";
+    const ownerName = fresh.ownerSnapshot?.name || "Unknown";
+    return json({
+      id: fresh.id,
+      requestId: fresh.id,
+      requestType: "box",
+      title: previewTitle ? `${previewTitle} - ${ownerName}` : `Box ${fresh.id} - ${ownerName}`,
+      accept: fresh.acceptCount,
+      ignore: fresh.ignoreCount,
+      refuse: fresh.refuseCount,
+      status: fresh.votingStatus || "open",
+      openedAt: fresh.votingStartAt || fresh.submittedAt || "",
+      closedAt: fresh.votingEndAt || null,
+      outcome: null,
+    });
+  }
 
   try {
     await db().runTransaction(async (tx) => {
@@ -68,7 +104,34 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (outcome && fresh.status === "finalized" && outcome !== fresh.outcome) {
       await db().collection("votingItems").doc(id).set({ outcome, updatedAt: new Date().toISOString() }, { merge: true });
     }
-    await syncVotingToContent((await getDoc<VotingItemDoc>("votingItems", id)) as VotingItemDoc);
+    const latest = (await getDoc<VotingItemDoc>("votingItems", id)) as VotingItemDoc;
+    await syncVotingToContent(latest);
+
+    if (latest.requestType === "content") {
+      const voterName =
+        (typeof userData?.name === "string" && userData.name) ||
+        (typeof userData?.displayName === "string" && userData.displayName) ||
+        actorEmail ||
+        "Verified voter";
+      const content = await getDoc<Record<string, unknown>>("contentRequests", latest.requestId);
+      if (content) {
+        const existingNotes =
+          (content.adminNotes as { note: string; by: string; at: string }[] | undefined) || [];
+        const decisionLabel =
+          decision === "accept" ? "accepted" : decision === "refuse" ? "refused" : "ignored";
+        await updateDoc("contentRequests", latest.requestId, {
+          adminNotes: [
+            ...existingNotes,
+            {
+              note: `Voted ${decisionLabel}`,
+              by: voterName,
+              at: new Date().toISOString().split("T")[0],
+            },
+          ],
+        });
+      }
+    }
+
     const synced = await getDoc("votingItems", id);
     return json(synced);
   } catch (e) {

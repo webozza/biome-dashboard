@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { guard } from "@/lib/server/guard";
 import { db } from "@/lib/server/firebase";
+import { ensureBmidBoxSeeded } from "@/lib/server/bmid-box";
 import { error, json } from "@/lib/server/response";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 100));
 
   try {
+    await ensureBmidBoxSeeded();
     type PendingDualityItem = { id: string; status?: unknown; createdAt?: unknown } & Record<string, unknown>;
     const toItem = (doc: FirebaseFirestore.QueryDocumentSnapshot): PendingDualityItem =>
       ({ id: doc.id, ...(doc.data() as Record<string, unknown>) });

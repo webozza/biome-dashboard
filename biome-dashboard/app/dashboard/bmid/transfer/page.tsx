@@ -5,6 +5,7 @@ import { ArrowRightLeft, FileText, GitBranch, Loader2, Plus, ShieldCheck } from 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { UserPicker, type UserPickerOption } from "@/components/ui/user-picker";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { readJson } from "@/lib/http";
 
 type UserPostOption = {
   id: string;
@@ -13,16 +14,6 @@ type UserPostOption = {
   imageUrl: string | null;
   createdAt: unknown;
 };
-
-async function readJson<T>(resp: Response): Promise<T> {
-  const data = (await resp.json().catch(() => null)) as T & { error?: string; reason?: string };
-  if (!resp.ok) {
-    const message = data?.error || "request_failed";
-    const reason = data?.reason ? ` (${data.reason})` : "";
-    throw new Error(`${message}${reason}`);
-  }
-  return data;
-}
 
 const FIELD_CLASS =
   "w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-main outline-none transition-colors focus:border-white/20";

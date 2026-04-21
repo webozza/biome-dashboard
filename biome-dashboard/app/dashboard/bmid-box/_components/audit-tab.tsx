@@ -1,23 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { DataTable } from "@/components/ui/data-table";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import { readJson, type BmidBoxAuditRow } from "@/lib/bmid-box-client";
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+import { type BmidBoxAuditRow } from "@/lib/bmid-box-client";
+import { readJson } from "@/lib/http";
+import { formatDateTime } from "@/lib/format";
 
 export function AuditTab() {
   const apiToken = useAuthStore((state) => state.apiToken);
@@ -60,7 +51,7 @@ export function AuditTab() {
     { key: "status", label: "Status", render: (row: BmidBoxAuditRow) => <StatusBadge status={row.requestStatus} /> },
     { key: "actionType", label: "Action", render: (row: BmidBoxAuditRow) => <StatusBadge status={row.actionType} size="xs" /> },
     { key: "note", label: "Note", render: (row: BmidBoxAuditRow) => <span className="text-sm text-main">{row.note}</span> },
-    { key: "createdAt", label: "Time", render: (row: BmidBoxAuditRow) => <span className="text-xs text-muted">{formatDate(row.createdAt)}</span> },
+    { key: "createdAt", label: "Time", render: (row: BmidBoxAuditRow) => <span className="text-xs text-muted">{formatDateTime(row.createdAt)}</span> },
   ];
 
   return (
@@ -116,22 +107,17 @@ export function AuditTab() {
         }}
       />
 
-      {query.isLoading ? (
-        <div className="flex items-center justify-center py-24 text-muted">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
-      ) : (
-        <DataTable
-          columns={columns}
-          data={rows}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={filtered.length}
-          onPageChange={setCurrentPage}
-          emptyMessage="No audit rows"
-          emptyDescription="Important Box actions will be recorded here"
-        />
-      )}
+      <DataTable
+        columns={columns}
+        data={rows}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={filtered.length}
+        onPageChange={setCurrentPage}
+        emptyMessage="No audit rows"
+        emptyDescription="Important Box actions will be recorded here"
+        loading={query.isLoading}
+      />
     </div>
   );
 }

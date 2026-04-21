@@ -1,4 +1,7 @@
 import type { BmidBoxRequest, BmidBoxSettings } from "@/lib/data/bmid-box";
+import { readJson } from "@/lib/http";
+
+export { readJson };
 
 export type BmidBoxListResponse = {
   items: Array<BmidBoxRequest & { id: string }>;
@@ -29,16 +32,6 @@ export type BmidBoxAuditRow = {
   removalReason: string | null;
   createdAt: string;
 };
-
-export async function readJson<T>(resp: Response): Promise<T> {
-  const data = (await resp.json().catch(() => null)) as T & { error?: string; reason?: string };
-  if (!resp.ok) {
-    const message = data?.error || "request_failed";
-    const reason = data?.reason ? ` (${data.reason})` : "";
-    throw new Error(`${message}${reason}`);
-  }
-  return data;
-}
 
 export async function fetchBmidBoxRequests(apiToken: string, params?: URLSearchParams) {
   const resp = await fetch(`/api/bmid-box/requests${params ? `?${params.toString()}` : ""}`, {

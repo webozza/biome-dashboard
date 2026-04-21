@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BmidBoxRequest } from "@/lib/data/bmid-box";
 import { DataTable } from "@/components/ui/data-table";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import { postBmidBoxAction, readJson } from "@/lib/bmid-box-client";
+import { postBmidBoxAction } from "@/lib/bmid-box-client";
+import { readJson } from "@/lib/http";
+import { formatDate } from "@/lib/format";
 
 function finalResult(request: BmidBoxRequest) {
   if (request.currentStatus === "approved") return "Approved";
@@ -20,11 +21,6 @@ function finalResult(request: BmidBoxRequest) {
   if (max === request.acceptCount) return "Accept leading";
   if (max === request.refuseCount) return "Refuse leading";
   return "Ignore leading";
-}
-
-function formatDate(value: string | null) {
-  if (!value) return "Not set";
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 export function VotingTab() {
@@ -190,26 +186,21 @@ export function VotingTab() {
           }}
         />
 
-        {query.isLoading ? (
-          <div className="flex items-center justify-center py-24 text-muted">
-            <Loader2 className="h-6 w-6 animate-spin" />
-          </div>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={rows}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={filtered.length}
-            onPageChange={setCurrentPage}
-            getId={(request) => request.id}
-            onRowClick={(request) => {
-              window.location.href = `/dashboard/bmid-box/requests/${request.id}`;
-            }}
-            emptyMessage="No voting sessions"
-            emptyDescription="Move a request to voting stage to see it here"
-          />
-        )}
+        <DataTable
+          columns={columns}
+          data={rows}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filtered.length}
+          onPageChange={setCurrentPage}
+          getId={(request) => request.id}
+          onRowClick={(request) => {
+            window.location.href = `/dashboard/bmid-box/requests/${request.id}`;
+          }}
+          emptyMessage="No voting sessions"
+          emptyDescription="Move a request to voting stage to see it here"
+          loading={query.isLoading}
+        />
       </div>
 
       <div className="card p-6">

@@ -25,6 +25,8 @@ interface DataTableProps<T> {
   onRowClick?: (item: T) => void;
   emptyMessage?: string;
   emptyDescription?: string;
+  loading?: boolean;
+  skeletonRows?: number;
 }
 
 export function DataTable<T>({
@@ -43,6 +45,8 @@ export function DataTable<T>({
   onRowClick,
   emptyMessage = "No results found",
   emptyDescription = "Adjust filters to synchronize data",
+  loading = false,
+  skeletonRows,
 }: DataTableProps<T>) {
   const allSelected =
     getId && data.length > 0 && data.every((item) => selectedItems.includes(getId(item)));
@@ -87,7 +91,27 @@ export function DataTable<T>({
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.02]">
-            {data.length === 0 ? (
+            {loading ? (
+              Array.from({ length: skeletonRows ?? Math.min(pageSize, 6) }).map((_, idx) => (
+                <tr key={`skeleton-${idx}`} className="table-row">
+                  {onToggleItem && getId && (
+                    <td className="table-cell w-12 !pr-0">
+                      <div className="flex justify-center">
+                        <div className="w-4 h-4 rounded-md bg-white/[0.04] animate-pulse" />
+                      </div>
+                    </td>
+                  )}
+                  {columns.map((col) => (
+                    <td key={col.key} className={`table-cell ${col.className || ""}`}>
+                      <div
+                        className="h-3.5 rounded-md bg-white/[0.04] animate-pulse"
+                        style={{ width: `${40 + ((idx * 13 + col.key.length * 7) % 45)}%` }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : data.length === 0 ? (
               <tr>
                 <td
                   colSpan={columns.length + (onToggleItem ? 1 : 0)}
@@ -127,6 +151,7 @@ export function DataTable<T>({
                           <input
                             type="checkbox"
                             checked={isSelected}
+                            onClick={(e) => e.stopPropagation()}
                             onChange={(e) => {
                               e.stopPropagation();
                               onToggleItem(id);

@@ -19,10 +19,12 @@ import {
   listDocIds,
   updateDoc,
 } from "@/lib/server/firestore";
+import { buildDualityRequestFromBox } from "@/lib/server/bmid";
 
 const REQUESTS_COLLECTION = "bmidBoxRequests";
 const SETTINGS_COLLECTION = "bmidBoxSettings";
 const SETTINGS_DOC_ID = "global";
+const DUALITY_COLLECTION = "dualityRequests";
 
 export type BmidBoxRequestDoc = BmidBoxRequest & { id: string };
 
@@ -79,9 +81,34 @@ async function ensureSettingsSeeded() {
   );
 }
 
+async function backfillBoxDualityRequests() {
+  const { items } = await listCollection<BmidBoxRequest>(REQUESTS_COLLECTION, {
+    limit: 100,
+    orderBy: "createdAt",
+  });
+
+  await Promise.all(
+    items.map(async (request) => {
+      if (request.type !== "duality") return;
+      if (request.currentStatus !== "pending_tagged_user") return;
+      if (!request.taggedUserId) return;
+      const existing = await getDoc(DUALITY_COLLECTION, request.id);
+      if (existing) return;
+      await buildDualityRequestFromBox(request.id, {
+        ownerId: request.ownerUserId,
+        ownerName: request.ownerSnapshot?.name || "Unknown owner",
+        taggedUserId: request.taggedUserId,
+        taggedUserName: request.taggedSnapshot?.name || "Unknown tagged user",
+        taggedUserAction: "pending",
+      });
+    })
+  );
+}
+
 export async function ensureBmidBoxSeeded() {
   await ensureSettingsSeeded();
   await backfillRequestSnapshots();
+  await backfillBoxDualityRequests();
 }
 
 export async function listBmidBoxRequests() {

@@ -159,7 +159,7 @@ export default function DashboardPage() {
 
       {/* Charts Row 1: Area Line + Donut */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 card shadow-xl overflow-hidden p-6">
+        <div className="xl:col-span-2 min-w-0 card overflow-hidden p-6">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
               <div className="w-1 h-8 bg-primary rounded-full" />
@@ -209,7 +209,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Status Breakdown Donut */}
-        <div className="card shadow-xl p-6">
+        <div className="card p-6 min-w-0">
           <div className="mb-6">
             <h3 className="font-extrabold text-main tracking-tight">Operational State</h3>
             <p className="text-[10px] text-muted font-bold uppercase tracking-widest">Resource distribution</p>
@@ -268,7 +268,7 @@ export default function DashboardPage() {
       {/* Row 4: Pending Actions + Activity */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Pending Action Queue */}
-        <div className="card shadow-xl p-6">
+        <div className="card p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="font-extrabold text-main tracking-tight">Action Backlog</h3>
@@ -303,7 +303,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent Activity */}
-        <div className="xl:col-span-2 card shadow-xl p-6">
+        <div className="xl:col-span-2 card p-6">
           <div className="flex items-center justify-between mb-8">
             <div>
               <h3 className="font-extrabold text-main tracking-tight">Audit Stream</h3>
@@ -336,7 +336,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Flagged Items (Modern Table) */}
-      <div className="card shadow-xl overflow-hidden">
+      <div className="card overflow-hidden">
         <div className="p-6 border-b border-border bg-surface-hover/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">

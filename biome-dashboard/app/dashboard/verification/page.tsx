@@ -5,7 +5,6 @@ import {
   CheckCircle,
   Loader2,
   Plus,
-  ShieldAlert,
   ShieldCheck,
   Trash2,
   Undo2,
@@ -24,6 +23,9 @@ import { SearchFilterBar } from "@/components/ui/search-filter-bar";
 import { UserPicker, type UserPickerOption } from "@/components/ui/user-picker";
 import { useDashboardStore } from "@/lib/stores/dashboard-store";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { readJson } from "@/lib/http";
+import { formatDate } from "@/lib/format";
+import { AuthGate } from "@/components/ui/auth-gate";
 
 type VerificationListResponse = {
   
@@ -40,16 +42,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   twitter: "Twitter",
   facebook: "Facebook",
 };
-
-async function readJson<T>(resp: Response): Promise<T> {
-  const data = (await resp.json().catch(() => null)) as T & { error?: string; reason?: string };
-  if (!resp.ok) {
-    const message = data?.error || "request_failed";
-    const reason = data?.reason ? ` (${data.reason})` : "";
-    throw new Error(`${message}${reason}`);
-  }
-  return data;
-}
 
 async function fetchVerificationList({
   token,
@@ -155,16 +147,6 @@ const EMPTY_CREATE_FORM = {
 
 const NEUTRAL_FIELD_CLASS =
   "w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-main outline-none transition-colors focus:border-white/20";
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function matchesSearch(item: VerificationRequest, query: string) {
   if (!query) return true;
@@ -503,27 +485,7 @@ export default function VerificationPage() {
   }
 
   if (!apiToken) {
-    return (
-      <div className="space-y-4 animate-fade-in">
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="w-6 h-6 text-accent" />
-          <div>
-            <h1 className="text-xl font-bold">Verification Requests</h1>
-            <p className="text-sm text-tertiary">Review and manage BMID verification requests</p>
-          </div>
-        </div>
-
-        <div className="bg-card border border-amber-500/20 rounded-2xl p-6 flex items-start gap-4">
-          <ShieldAlert className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-amber-300">Admin API token is unavailable.</p>
-            <p className="text-sm text-tertiary">
-              This page now reads from the backend verification API. Sign in with the email/password admin flow so the UI can attach the required bearer token.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    return <AuthGate icon={ShieldCheck} title="Verification Requests" subtitle="Review and manage BMID verification requests" />;
   }
 
   return (
@@ -538,14 +500,14 @@ export default function VerificationPage() {
         </div>
         <button
           onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white border border-emerald-500/40 hover:bg-emerald-500 transition-colors text-sm font-medium shadow-lg shadow-emerald-700/20"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15 transition-colors text-sm font-medium"
         >
           <Plus className="w-4 h-4" />
           New Request
         </button>
       </div>
 
-      <div className="bg-card border border-primary rounded-2xl p-5">
+      <div className="bg-card border border-border rounded-2xl p-5">
         <SearchFilterBar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -612,6 +574,7 @@ export default function VerificationPage() {
             getId={(row) => row.id}
             onRowClick={handleRowClick}
             emptyDescription="Change backend filters or search within the current result page."
+            loading={listQuery.isLoading}
           />
         </div>
       </div>
@@ -620,6 +583,7 @@ export default function VerificationPage() {
         open={Boolean(selectedId)}
         onClose={() => setSelectedId(null)}
         title="Verification Details"
+        variant="modal"
         panelClassName="max-w-2xl"
       >
         {!selected ? (
@@ -876,6 +840,7 @@ export default function VerificationPage() {
           setCreateOpen(false);
         }}
         title="New Verification"
+        variant="modal"
         panelClassName="max-w-3xl"
       >
         <div className="space-y-6">
@@ -1119,7 +1084,7 @@ export default function VerificationPage() {
                 !createForm.representsRealIdentity ||
                 !createForm.agreementAccepted
               }
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white border border-emerald-500/40 rounded-xl text-sm hover:bg-emerald-500 transition-colors disabled:opacity-60"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl text-sm hover:bg-primary/15 transition-colors disabled:opacity-60"
             >
               {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Create

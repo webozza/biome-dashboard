@@ -69,7 +69,7 @@ export default function AuditPage() {
         </button>
       </div>
 
-      <div className="card shadow-xl">
+      <div className="card">
         <div className="mb-6">
           <SearchFilterBar
             searchQuery={searchQuery}

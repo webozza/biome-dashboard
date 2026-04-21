@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { ExternalLink, Loader2, Plus, RotateCcw, Sparkles, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BmidBoxPlatform, BmidBoxRequest, BmidBoxRequestType } from "@/lib/data/bmid-box";
@@ -17,6 +18,7 @@ import {
   resetBmidBoxRequestsApi,
   seedBmidBoxRequestsApi,
 } from "@/lib/bmid-box-client";
+import { formatDate } from "@/lib/format";
 import { Box } from "lucide-react";
 
 const platformTone: Record<string, string> = {
@@ -25,14 +27,6 @@ const platformTone: Record<string, string> = {
   youtube: "bg-red-500/10 text-red-400 border-red-500/20",
   facebook: "bg-blue-500/10 text-blue-400 border-blue-500/20",
 };
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 type CreateFormState = {
   owner: UserPickerOption | null;
@@ -308,7 +302,7 @@ export function RequestsTab() {
         ))}
       </div>
 
-      <div className="card p-6 shadow-xl">
+      <div className="card p-6">
         <SearchFilterBar
           searchQuery={searchQuery}
           onSearchChange={(value) => {
@@ -368,44 +362,49 @@ export function RequestsTab() {
           }}
         />
 
-        {listQuery.isLoading ? (
-          <div className="flex items-center justify-center py-24 text-muted">
-            <Loader2 className="h-6 w-6 animate-spin" />
-          </div>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={rows}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={filtered.length}
-            onPageChange={setCurrentPage}
-            getId={(request) => request.id}
-            onRowClick={(request) => {
-              window.location.href = `/dashboard/bmid-box/requests/${request.id}`;
-            }}
-            emptyMessage="No Box requests found"
-            emptyDescription="Try a different filter or seed demo data"
-          />
-        )}
+        <DataTable
+          columns={columns}
+          data={rows}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filtered.length}
+          onPageChange={setCurrentPage}
+          getId={(request) => request.id}
+          onRowClick={(request) => {
+            window.location.href = `/dashboard/bmid-box/requests/${request.id}`;
+          }}
+          emptyMessage="No Box requests found"
+          emptyDescription="Try a different filter or seed demo data"
+          loading={listQuery.isLoading}
+        />
       </div>
 
-      {showCreate ? (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4">
-          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/10 bg-[#0b0b0b] shadow-2xl">
-            <button
-              onClick={() => setShowCreate(false)}
-              className="absolute right-4 top-4 rounded-xl border border-white/10 p-2 text-muted hover:text-main"
-            >
-              <X className="h-4 w-4" />
-            </button>
+      {showCreate && typeof document !== "undefined" ? createPortal(
+        <>
+          <div
+            onClick={() => setShowCreate(false)}
+            className="fixed inset-0 z-[190] bg-black/60 backdrop-blur-md animate-fade-in"
+          />
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-8 pointer-events-none animate-fade-in">
+            <div className="relative w-full max-w-2xl max-h-[calc(100vh-2rem)] overflow-hidden rounded-[28px] border border-border bg-surface/95 shadow-2xl backdrop-blur-3xl pointer-events-auto flex flex-col">
+              <div className="sticky top-0 z-10 flex items-center justify-between gap-4 px-6 py-5 border-b border-border bg-surface/40 backdrop-blur-3xl">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <h2 className="text-xl font-black tracking-tighter text-main uppercase italic truncate">
+                    New BMID Box Request
+                  </h2>
+                  <p className="text-[10px] font-black tracking-[0.3em] text-muted uppercase opacity-50 truncate">
+                    Admin Test Submission
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowCreate(false)}
+                  className="shrink-0 w-10 h-10 rounded-xl bg-surface-hover border border-border text-muted hover:text-main transition-all active:scale-90 flex items-center justify-center group"
+                >
+                  <X className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+                </button>
+              </div>
 
-            <div className="border-b border-white/5 p-6">
-              <h2 className="text-xl font-extrabold tracking-tight text-main">New BMID Box Request</h2>
-              <p className="text-xs text-muted">Admin test submission.</p>
-            </div>
-
-            <div className="space-y-5 p-6">
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-5 p-6">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-muted">Type</label>
@@ -533,24 +532,26 @@ export function RequestsTab() {
               ) : null}
             </div>
 
-            <div className="flex items-center justify-end gap-3 border-t border-white/5 p-6">
-              <button
-                onClick={() => setShowCreate(false)}
-                className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-muted hover:text-main"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitCreate}
-                disabled={createMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-emerald-600 disabled:opacity-60"
-              >
-                {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Create
-              </button>
+              <div className="flex items-center justify-end gap-3 border-t border-border bg-surface/40 backdrop-blur-3xl px-6 py-4">
+                <button
+                  onClick={() => setShowCreate(false)}
+                  className="rounded-xl border border-border bg-surface px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-muted hover:text-main"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitCreate}
+                  disabled={createMutation.isPending}
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                >
+                  {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  Create
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </>,
+        document.body
       ) : null}
     </div>
   );

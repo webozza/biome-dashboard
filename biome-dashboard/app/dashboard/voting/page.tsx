@@ -1,7 +1,7 @@
 "use client";
 
 import { useDeferredValue, useMemo, useState } from "react";
-import { CheckCircle, Eye, Loader2, Vote, XCircle } from "lucide-react";
+import { CheckCircle, CheckCircle2, Eye, Loader2, MinusCircle, Vote, XCircle } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { VotingItem } from "@/lib/data/mock-data";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -12,6 +12,9 @@ import { useDashboardStore } from "@/lib/stores/dashboard-store";
 import { MetricCard } from "@/components/ui/metric-card";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { UserPicker, type UserPickerOption } from "@/components/ui/user-picker";
+import { readJson } from "@/lib/http";
+import { formatDate } from "@/lib/format";
+import { AuthGate } from "@/components/ui/auth-gate";
 
 type VotingListResponse = {
   items: VotingItem[];
@@ -29,27 +32,6 @@ function getLiveOutcome(item: VotingItem): VotingItem["outcome"] {
   if (max <= 0) return null;
   const leaders = counts.filter((entry) => entry.value === max);
   return leaders.length === 1 ? leaders[0].outcome : null;
-}
-
-async function readJson<T>(resp: Response): Promise<T> {
-  const data = (await resp.json().catch(() => null)) as T & { error?: string; reason?: string };
-  if (!resp.ok) {
-    const message = data?.error || "request_failed";
-    const reason = data?.reason ? ` (${data.reason})` : "";
-    throw new Error(`${message}${reason}`);
-  }
-  return data;
-}
-
-function formatDate(value: string | null) {
-  if (!value) return "Active session";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function matchesSearch(item: VotingItem, query: string) {
@@ -113,6 +95,8 @@ export default function VotingPage() {
   } = useDashboardStore();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedVoter, setSelectedVoter] = useState<UserPickerOption | null>(null);
+  const [quickVoteId, setQuickVoteId] = useState<string | null>(null);
+  const [quickVoter, setQuickVoter] = useState<UserPickerOption | null>(null);
   const [pageCursors, setPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -137,6 +121,23 @@ export default function VotingPage() {
     placeholderData: (previousData) => previousData,
   });
 
+  const openSessionsQuery = useQuery({
+    queryKey: ["voting", "open-sessions"],
+    queryFn: async () => {
+      const resp = await fetch("/api/voting?status=open&limit=100", {
+        headers: { authorization: `Bearer ${apiToken}` },
+      });
+      return readJson<{ items: VotingItem[] }>(resp);
+    },
+    enabled: Boolean(apiToken),
+  });
+
+  const openSessions = openSessionsQuery.data?.items || [];
+  const quickSelected = useMemo(
+    () => openSessions.find((item) => item.id === quickVoteId) || null,
+    [openSessions, quickVoteId]
+  );
+
   const visibleRows = useMemo(
     () => (listQuery.data?.items || []).filter((item) => matchesSearch(item, deferredSearchQuery)),
     [deferredSearchQuery, listQuery.data?.items]
@@ -159,6 +160,9 @@ export default function VotingPage() {
     onSuccess: (updated) => {
       queryClient.setQueryData(["voting", "detail", updated.id], updated);
       queryClient.invalidateQueries({ queryKey: ["voting", "list"] });
+      queryClient.invalidateQueries({ queryKey: ["voting", "open-sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["content"] });
+      queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
     },
   });
 
@@ -189,6 +193,9 @@ export default function VotingPage() {
     onSuccess: (updated) => {
       queryClient.setQueryData(["voting", "detail", updated.id], updated);
       queryClient.invalidateQueries({ queryKey: ["voting", "list"] });
+      queryClient.invalidateQueries({ queryKey: ["voting", "open-sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["content"] });
+      queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
     },
   });
 
@@ -307,24 +314,7 @@ export default function VotingPage() {
   }
 
   if (!apiToken) {
-    return (
-      <div className="space-y-4 animate-fade-in">
-        <div className="flex items-center gap-3">
-          <Vote className="w-6 h-6 text-primary" />
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-main">Voting Monitor</h1>
-            <p className="text-sm text-muted font-medium italic">Decision making and consensus oversight</p>
-          </div>
-        </div>
-
-        <div className="bg-card border border-amber-500/20 rounded-2xl p-6">
-          <p className="text-sm font-semibold text-amber-300">Admin API token is unavailable.</p>
-          <p className="mt-2 text-sm text-tertiary">
-            This page now loads voting sessions from the backend API. Sign in with the admin email/password flow so the UI can attach the required bearer token.
-          </p>
-        </div>
-      </div>
-    );
+    return <AuthGate icon={Vote} title="Voting Monitor" subtitle="Decision making and consensus oversight" />;
   }
 
   return (
@@ -354,7 +344,136 @@ export default function VotingPage() {
         ))}
       </div>
 
-      <div className="card shadow-xl">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-6">
+        <div className="card space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-main">Open Sessions</h2>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">
+              {openSessions.length} active
+            </span>
+          </div>
+          {openSessionsQuery.isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading voting sessions...
+            </div>
+          ) : openSessions.length ? (
+            <div className="space-y-3 max-h-[340px] overflow-y-auto custom-scrollbar pr-1">
+              {openSessions.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setQuickVoteId(item.id)}
+                  className={`w-full rounded-xl border p-4 text-left transition-all ${
+                    quickVoteId === item.id
+                      ? "border-primary/40 bg-primary/5"
+                      : "border-border bg-surface hover:border-muted/40"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-main truncate">{item.title}</p>
+                      <p className="mt-1 text-xs text-muted font-mono truncate">{item.requestId}</p>
+                    </div>
+                    <StatusBadge status={item.status} size="xs" />
+                  </div>
+                  <div className="mt-3 flex gap-4 text-xs font-bold">
+                    <span className="text-emerald-400">A {item.accept}</span>
+                    <span className="text-amber-400">I {item.ignore}</span>
+                    <span className="text-red-400">R {item.refuse}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted">No open voting sessions right now.</p>
+          )}
+        </div>
+
+        <div className="card space-y-5">
+          <h2 className="text-sm font-black uppercase tracking-[0.2em] text-main">Record Vote</h2>
+          {!quickSelected ? (
+            <p className="text-sm text-muted">Select an open session on the left to record a vote.</p>
+          ) : (
+            <>
+              <div className="rounded-xl border border-border bg-surface p-4">
+                <p className="text-sm font-bold text-main">{quickSelected.title}</p>
+                <p className="mt-1 text-xs text-muted font-mono">{quickSelected.id}</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs text-muted font-bold uppercase tracking-wider">Which user is voting?</label>
+                <UserPicker
+                  token={apiToken!}
+                  value={quickVoter}
+                  onSelect={setQuickVoter}
+                  verifiedOnly
+                  disabled={recordVoteMutation.isPending}
+                />
+                <p className="text-[11px] text-muted">Only verified users with BMID can vote.</p>
+              </div>
+
+              {recordVoteMutation.isError ? (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300">
+                  {recordVoteMutation.error.message}
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  onClick={() =>
+                    quickSelected && quickVoter
+                      ? void recordVoteMutation.mutateAsync({
+                          id: quickSelected.id,
+                          actor: quickVoter,
+                          decision: "accept",
+                        })
+                      : undefined
+                  }
+                  disabled={recordVoteMutation.isPending || !quickVoter}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-60"
+                >
+                  {recordVoteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Record Accept
+                </button>
+                <button
+                  onClick={() =>
+                    quickSelected && quickVoter
+                      ? void recordVoteMutation.mutateAsync({
+                          id: quickSelected.id,
+                          actor: quickVoter,
+                          decision: "ignore",
+                        })
+                      : undefined
+                  }
+                  disabled={recordVoteMutation.isPending || !quickVoter}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-sm font-medium text-amber-300 hover:bg-amber-500/20 disabled:opacity-60"
+                >
+                  {recordVoteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <MinusCircle className="w-4 h-4" />}
+                  Record Ignore
+                </button>
+                <button
+                  onClick={() =>
+                    quickSelected && quickVoter
+                      ? void recordVoteMutation.mutateAsync({
+                          id: quickSelected.id,
+                          actor: quickVoter,
+                          decision: "refuse",
+                        })
+                      : undefined
+                  }
+                  disabled={recordVoteMutation.isPending || !quickVoter}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-300 hover:bg-red-500/20 disabled:opacity-60"
+                >
+                  {recordVoteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                  Record Refuse
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="card">
         <div className="mb-6">
           <SearchFilterBar
             searchQuery={searchQuery}
@@ -412,6 +531,7 @@ export default function VotingPage() {
             getId={(row) => row.id}
             onRowClick={(row) => setSelectedId(row.id)}
             emptyDescription="Change backend filters or search within the current result page."
+            loading={listQuery.isLoading}
           />
         </div>
       </div>
@@ -450,7 +570,7 @@ export default function VotingPage() {
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Concluded</p>
-                <p className="text-sm font-medium">{formatDate(selected.closedAt)}</p>
+                <p className="text-sm font-medium">{formatDate(selected.closedAt, "Active session")}</p>
               </div>
             </div>
 

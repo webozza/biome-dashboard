@@ -35,21 +35,21 @@ export function DetailDrawer({
       <div
         className={
           isModal
-            ? `fixed inset-0 z-[80] flex items-center justify-center p-4 md:p-8 pointer-events-none animate-fade-in ${panelClassName}`
-            : `fixed right-0 top-0 h-full w-full max-w-xl z-[80] animate-slide-in-right shadow-[-24px_0_80px_rgba(187,247,208,0.08)] ${panelClassName}`
+            ? "fixed inset-0 z-[80] flex items-center justify-center p-4 md:p-8 pointer-events-none animate-fade-in"
+            : `fixed right-0 top-0 h-full w-full max-w-xl z-[80] animate-slide-in-right shadow-2xl ${panelClassName}`
         }
       >
         <div
           className={
             isModal
-              ? "w-full max-w-4xl max-h-[calc(100vh-2rem)] overflow-hidden rounded-[28px] border border-white/10 bg-[#070707]/95 shadow-2xl backdrop-blur-3xl pointer-events-auto"
-              : "h-full w-full overflow-y-auto custom-scrollbar border-l border-[#d9eadd]/18 bg-[#070707]/95 shadow-[inset_1px_0_0_rgba(220,252,231,0.08)] backdrop-blur-3xl"
+              ? `w-full ${panelClassName || "max-w-4xl"} max-h-[calc(100vh-2rem)] overflow-hidden rounded-[28px] border border-border bg-surface/95 shadow-2xl backdrop-blur-3xl pointer-events-auto`
+              : "h-full w-full overflow-y-auto custom-scrollbar border-l border-border bg-surface/95 backdrop-blur-3xl"
           }
         >
-          <div className="sticky top-0 z-10 backdrop-blur-3xl px-8 py-6 flex items-center justify-between gap-4 bg-surface/40 border-b border-white/5">
+          <div className="sticky top-0 z-10 backdrop-blur-3xl px-8 py-6 flex items-center justify-between gap-4 bg-surface/40 border-b border-border">
             <div className="min-w-0 flex-1 space-y-1">
               <h2
-                className="text-xl font-black tracking-tighter text-white uppercase italic truncate"
+                className="text-xl font-black tracking-tighter text-main uppercase italic truncate"
                 title={title}
               >
                 {title}
@@ -60,7 +60,7 @@ export function DetailDrawer({
             </div>
             <button
               onClick={onClose}
-              className="shrink-0 w-10 h-10 rounded-xl bg-white/5 border border-white/5 text-muted hover:bg-white/10 hover:text-white transition-all active:scale-90 flex items-center justify-center group"
+              className="shrink-0 w-10 h-10 rounded-xl bg-surface-hover border border-border text-muted hover:bg-surface-hover hover:text-main transition-all active:scale-90 flex items-center justify-center group"
             >
               <X className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
             </button>

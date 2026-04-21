@@ -78,6 +78,96 @@
   --overlay-strong: rgba(255, 255, 255, 0.06);
 }
 
+/* Light mode: dark-theme overlay utilities (border-white/*, bg-white/*) are
+   invisible on a white background. Remap them to theme tokens. Also soften
+   heavy black drop shadows which look harsh on light surfaces. */
+html:not(.dark) [class*="border-white/"] {
+  border-color: var(--border);
+}
+html:not(.dark) [class*="bg-white/"] {
+  background-color: var(--overlay-weak);
+}
+html:not(.dark) [class*="hover:bg-white/"]:hover {
+  background-color: var(--overlay-strong);
+}
+html:not(.dark) [class*="hover:border-white/"]:hover {
+  border-color: var(--hairline);
+}
+
+html:not(.dark) .shadow-sm,
+html:not(.dark) .shadow,
+html:not(.dark) .shadow-md,
+html:not(.dark) .shadow-lg,
+html:not(.dark) .shadow-xl,
+html:not(.dark) .shadow-2xl,
+html:not(.dark) .shadow-inner,
+html:not(.dark) [class*="shadow-["],
+html:not(.dark) .card,
+html:not(.dark) .table-container,
+html:not(.dark) .detail-pane {
+  box-shadow: none;
+}
+
+html:not(.dark) {
+  --card-shadow: none;
+  --accent-shadow: none;
+}
+
+/* Light mode: text-white is unreadable on light surfaces. Remap to the theme
+   foreground, then selectively restore white for elements that sit on a
+   colored / dark-tone background (buttons, badges, gradients, dark panels). */
+html:not(.dark) .text-white {
+  color: var(--text-main);
+}
+
+html:not(.dark) [class*="bg-primary"].text-white,
+html:not(.dark) [class*="bg-emerald-"].text-white,
+html:not(.dark) [class*="bg-red-"].text-white,
+html:not(.dark) [class*="bg-rose-"].text-white,
+html:not(.dark) [class*="bg-orange-"].text-white,
+html:not(.dark) [class*="bg-amber-"].text-white,
+html:not(.dark) [class*="bg-yellow-"].text-white,
+html:not(.dark) [class*="bg-lime-"].text-white,
+html:not(.dark) [class*="bg-green-"].text-white,
+html:not(.dark) [class*="bg-teal-"].text-white,
+html:not(.dark) [class*="bg-cyan-"].text-white,
+html:not(.dark) [class*="bg-sky-"].text-white,
+html:not(.dark) [class*="bg-blue-"].text-white,
+html:not(.dark) [class*="bg-indigo-"].text-white,
+html:not(.dark) [class*="bg-violet-"].text-white,
+html:not(.dark) [class*="bg-purple-"].text-white,
+html:not(.dark) [class*="bg-fuchsia-"].text-white,
+html:not(.dark) [class*="bg-pink-"].text-white,
+html:not(.dark) [class*="bg-black"].text-white,
+html:not(.dark) [class*="bg-neutral-8"].text-white,
+html:not(.dark) [class*="bg-neutral-9"].text-white,
+html:not(.dark) [class*="bg-zinc-8"].text-white,
+html:not(.dark) [class*="bg-zinc-9"].text-white,
+html:not(.dark) [class*="bg-slate-8"].text-white,
+html:not(.dark) [class*="bg-slate-9"].text-white,
+html:not(.dark) [class*="bg-gray-8"].text-white,
+html:not(.dark) [class*="bg-gray-9"].text-white,
+html:not(.dark) [class*="bg-gradient"].text-white,
+html:not(.dark) [class*="from-"].text-white {
+  color: #ffffff;
+}
+
+/* Also preserve white for descendants sitting inside a dark-themed container
+   (auth screens, drawers with hardcoded dark panels). */
+html:not(.dark) [class*="bg-black"] .text-white,
+html:not(.dark) [class*="bg-[#0"] .text-white,
+html:not(.dark) [class*="bg-[#1"] .text-white,
+html:not(.dark) [class*="bg-neutral-8"] .text-white,
+html:not(.dark) [class*="bg-neutral-9"] .text-white,
+html:not(.dark) [class*="bg-zinc-8"] .text-white,
+html:not(.dark) [class*="bg-zinc-9"] .text-white,
+html:not(.dark) [class*="bg-slate-8"] .text-white,
+html:not(.dark) [class*="bg-slate-9"] .text-white,
+html:not(.dark) [class*="bg-gray-8"] .text-white,
+html:not(.dark) [class*="bg-gray-9"] .text-white {
+  color: #ffffff;
+}
+
 @layer base {
   * { @apply border-border; }
   body {
@@ -201,4 +291,16 @@
 @keyframes scan-inner {
   0%, 100% { transform: translateY(-50%); opacity: 0; }
   50% { transform: translateY(150%); opacity: 1; }
+}
+
+/* Unlayered — beats Tailwind v4's preflight which sets cursor:default on buttons. */
+button:not(:disabled),
+[role="button"]:not(:disabled),
+summary,
+label[for] {
+  cursor: pointer;
+}
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
 }

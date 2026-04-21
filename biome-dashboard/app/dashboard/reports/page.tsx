@@ -64,7 +64,7 @@ export default function ReportsPage() {
         {reportTypes.map((report) => (
           <div
             key={report.title}
-            className="card shadow-xl p-6 group hover:translate-y-[-4px] transition-all duration-300"
+            className="card p-6 group hover:translate-y-[-4px] transition-all duration-300"
           >
             <div className="flex items-start justify-between mb-6">
               <div className="max-w-[70%]">

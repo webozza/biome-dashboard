@@ -6,7 +6,6 @@ import {
   ShieldCheck,
   ShieldOff,
   Loader2,
-  LogIn,
   Mail,
   Calendar,
   Hash,
@@ -19,6 +18,8 @@ import { DetailDrawer } from "@/components/ui/detail-drawer";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
 import { useDashboardStore } from "@/lib/stores/dashboard-store";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { readJson } from "@/lib/http";
+import { AuthGate } from "@/components/ui/auth-gate";
 
 type UserDoc = {
   id: string;
@@ -59,12 +60,6 @@ type ContentDoc = {
   type: string;
   createdAt: string;
 };
-
-async function readJson<T>(resp: Response): Promise<T> {
-  const data = (await resp.json().catch(() => null)) as T & { error?: string };
-  if (!resp.ok) throw new Error((data as { error?: string })?.error || "request_failed");
-  return data;
-}
 
 function formatDate(value: unknown) {
   const normalized =
@@ -266,29 +261,7 @@ export default function UsersPage() {
   ];
 
   if (!apiToken) {
-    return (
-      <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-primary/10 rounded-xl text-primary font-bold">
-            <Users className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-main">User Profiles</h1>
-            <p className="text-sm text-muted font-medium italic">Directory of all ecosystem participants</p>
-          </div>
-        </div>
-        <div className="card p-8 flex flex-col items-center gap-4">
-          <LogIn className="w-8 h-8 text-amber-400" />
-          <p className="text-sm text-amber-300 font-semibold">Sign in to view users</p>
-          <a
-            href="/login"
-            className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-500 transition-colors"
-          >
-            Go to Login
-          </a>
-        </div>
-      </div>
-    );
+    return <AuthGate icon={Users} title="User Profiles" subtitle="Directory of all ecosystem participants" />;
   }
 
   return (
@@ -305,7 +278,7 @@ export default function UsersPage() {
         </div>
       </div>
 
-      <div className="card shadow-xl">
+      <div className="card">
         <div className="mb-6">
           <SearchFilterBar
             searchQuery={searchQuery}
@@ -352,6 +325,7 @@ export default function UsersPage() {
             getId={(r) => r.id}
             onRowClick={(r) => setSelectedId(r.id)}
             emptyDescription={deferredSearch ? "No users matched the current backend search." : "Change filters to load a different user segment."}
+            loading={listQuery.isLoading}
           />
         </div>
       </div>

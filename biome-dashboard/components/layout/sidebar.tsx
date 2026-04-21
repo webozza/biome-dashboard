@@ -17,7 +17,6 @@ import {
   LogOut,
   ChevronLeft,
   Hexagon,
-  ArrowRightLeft,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useDashboardStore } from "@/lib/stores/dashboard-store";
@@ -42,9 +41,7 @@ const navSections = [
     label: "Monitoring",
     items: [
       { href: "/dashboard/voting", label: "Voting", icon: Vote },
-      { href: "/dashboard/bmid/transfer", label: "Transfer Flow", icon: ArrowRightLeft },
       { href: "/dashboard/bmid/respond", label: "Tagged Response", icon: GitBranch },
-      { href: "/dashboard/bmid/vote", label: "Vote Recorder", icon: Vote },
       { href: "/dashboard/moderation", label: "Moderation", icon: AlertTriangle },
       { href: "/dashboard/users", label: "Users", icon: Users },
     ],

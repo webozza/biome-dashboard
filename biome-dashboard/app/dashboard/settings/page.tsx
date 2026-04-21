@@ -45,7 +45,7 @@ export default function SettingsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="space-y-8">
           {/* Allowed Platforms */}
-          <div className="card shadow-xl p-8">
+          <div className="card p-8">
             <h3 className="font-extrabold text-main tracking-tight flex items-center gap-2 mb-2">
               <div className="w-1.5 h-1.5 rounded-full bg-primary" />
               Verified Feed Access
@@ -79,7 +79,7 @@ export default function SettingsPage() {
           </div>
 
           {/* BMID Format */}
-          <div className="card shadow-xl p-8">
+          <div className="card p-8">
             <h3 className="font-extrabold text-main tracking-tight flex items-center gap-2 mb-2">
               <div className="w-1.5 h-1.5 rounded-full bg-primary" />
               Identity Indexing
@@ -127,7 +127,7 @@ export default function SettingsPage() {
 
         <div className="space-y-8">
           {/* Voting Settings */}
-          <div className="card shadow-xl p-8 border-l-4 border-l-primary/30">
+          <div className="card p-8 border-l-4 border-l-primary/30">
             <h3 className="font-extrabold text-main tracking-tight flex items-center gap-2 mb-2">
               <div className="w-1.5 h-1.5 rounded-full bg-primary" />
               Consensus Protocol
@@ -177,7 +177,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Notifications */}
-          <div className="card shadow-xl p-8">
+          <div className="card p-8">
             <h3 className="font-extrabold text-main tracking-tight flex items-center gap-2 mb-2">
               <div className="w-1.5 h-1.5 rounded-full bg-primary" />
               Alert Topography

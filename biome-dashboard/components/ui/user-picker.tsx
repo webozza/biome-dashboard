@@ -92,7 +92,7 @@ export function UserPicker({ token, value, onSelect, disabled = false, verifiedO
       </button>
 
       {open ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[120] overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b0b] shadow-2xl">
+        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[120] overflow-hidden rounded-2xl border border-white/10 bg-surface shadow-2xl">
           <div className="border-b border-white/5 p-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-muted" />

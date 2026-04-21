@@ -55,10 +55,10 @@ export function StatusBadge({ status, size = "sm" }: { status: string; size?: "x
     <span
       className={`inline-flex items-center gap-2 rounded-lg font-black tracking-[0.1em] uppercase ${config.bg} ${config.text} ${
         size === "xs" ? "px-2 py-0.5 text-[8px]" : "px-3 py-1.5 text-[9px]"
-      } border border-white/10 shadow-[0_0_15px_rgba(0,0,0,0.2)] relative overflow-hidden group`}
+      } border border-white/10 dark:shadow-[0_0_15px_rgba(0,0,0,0.2)] relative overflow-hidden group`}
     >
-      <div className={`absolute inset-0 opacity-30 ${config.bg} blur-md group-hover:opacity-50 transition-opacity`} />
-      <span className={`w-1.5 h-1.5 rounded-full ${config.dot} shadow-[0_0_10px_currentColor] relative z-10`} />
+      <div className={`absolute inset-0 opacity-0 dark:opacity-30 ${config.bg} dark:blur-md dark:group-hover:opacity-50 transition-opacity`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${config.dot} dark:shadow-[0_0_10px_currentColor] relative z-10`} />
       <span className="relative z-10">{label}</span>
     </span>
   );

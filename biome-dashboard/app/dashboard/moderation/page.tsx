@@ -107,7 +107,7 @@ export default function ModerationPage() {
         </div>
       </div>
 
-      <div className="card shadow-xl">
+      <div className="card">
         <div className="mb-6">
           {activeTab === "flagged" && (
             <SearchFilterBar

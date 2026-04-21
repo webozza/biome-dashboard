@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserPicker, type UserPickerOption } from "@/components/ui/user-picker";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { readJson } from "@/lib/http";
 
 type DualityDoc = {
   id: string;
@@ -18,16 +19,6 @@ type DualityDoc = {
   source: "content" | "box";
   createdAt: string;
 };
-
-async function readJson<T>(resp: Response): Promise<T> {
-  const data = (await resp.json().catch(() => null)) as T & { error?: string; reason?: string };
-  if (!resp.ok) {
-    const message = data?.error || "request_failed";
-    const reason = data?.reason ? ` (${data.reason})` : "";
-    throw new Error(`${message}${reason}`);
-  }
-  return data;
-}
 
 export default function BmidRespondPage() {
   const queryClient = useQueryClient();
@@ -79,6 +70,9 @@ export default function BmidRespondPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bmid-respond", "waiting"] });
+      queryClient.invalidateQueries({ queryKey: ["content"] });
+      queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
+      queryClient.invalidateQueries({ queryKey: ["duality"] });
       setSelectedId(null);
     },
   });
@@ -122,7 +116,14 @@ export default function BmidRespondPage() {
                       <p className="text-sm font-bold text-main">{item.ownerName} tagged {item.taggedUserName}</p>
                       <p className="mt-1 text-xs text-muted font-mono">{item.id}</p>
                     </div>
-                    <StatusBadge status={item.status} size="xs" />
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                        item.source === "box" ? "bg-amber-500/10 text-amber-300 border border-amber-500/20" : "bg-sky-500/10 text-sky-300 border border-sky-500/20"
+                      }`}>
+                        {item.source === "box" ? "BMID Box" : "BMID Content"}
+                      </span>
+                      <StatusBadge status={item.status} size="xs" />
+                    </div>
                   </div>
                 </button>
               ))}

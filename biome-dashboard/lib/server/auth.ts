@@ -32,11 +32,23 @@ export async function requireFirebaseUser(req: NextRequest): Promise<FirebaseUse
   const match = /^Bearer\s+(.+)$/i.exec(header);
   const token = match?.[1]?.trim();
   if (!token) return { ok: false, reason: "missing_token" };
+
+  let firebaseAuth: ReturnType<typeof auth>;
   try {
-    const decoded = await auth().verifyIdToken(token);
+    firebaseAuth = auth();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[requireFirebaseUser] admin sdk init failed:", message);
+    return { ok: false, reason: "admin_sdk_uninitialized" };
+  }
+
+  try {
+    const decoded = await firebaseAuth.verifyIdToken(token);
     const email = decoded.email || null;
     return { ok: true, uid: decoded.uid, email, isAdmin: isAdminEmail(email) };
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[requireFirebaseUser] verifyIdToken failed:", message);
     return { ok: false, reason: "invalid_id_token" };
   }
 }

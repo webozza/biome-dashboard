@@ -11,6 +11,7 @@ export default function LoginPage() {
   const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const initialized = useAuthStore((s) => s.initialized);
+  const isAdmin = useAuthStore((s) => s.user?.isAdmin ?? false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,9 +22,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (initialized && isAuthenticated) {
-      router.replace("/dashboard");
+      router.replace(isAdmin ? "/dashboard" : "/bmid");
     }
-  }, [initialized, isAuthenticated, router]);
+  }, [initialized, isAuthenticated, isAdmin, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +33,8 @@ export default function LoginPage() {
     const ok = await login(email, password);
     setLoading(false);
     if (ok) {
-      router.replace("/dashboard");
+      const admin = useAuthStore.getState().user?.isAdmin ?? false;
+      router.replace(admin ? "/dashboard" : "/bmid");
     } else {
       setError("Invalid email or password.");
     }
@@ -44,7 +46,8 @@ export default function LoginPage() {
     const ok = await loginWithGoogle();
     setGoogleLoading(false);
     if (ok) {
-      router.replace("/dashboard");
+      const admin = useAuthStore.getState().user?.isAdmin ?? false;
+      router.replace(admin ? "/dashboard" : "/bmid");
     } else {
       setError("Google sign-in failed. Please try again.");
     }

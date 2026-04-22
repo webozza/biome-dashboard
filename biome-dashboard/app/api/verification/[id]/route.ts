@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { buildDelete, buildGetOne } from "@/lib/server/resource";
+import { buildGetOne } from "@/lib/server/resource";
 import { guard } from "@/lib/server/guard";
-import { getDoc, updateDoc } from "@/lib/server/firestore";
+import { deleteDoc, getDoc, updateDoc } from "@/lib/server/firestore";
 import { error, json } from "@/lib/server/response";
 import { sendVerificationEmail } from "@/lib/server/email/transport";
 import { db } from "@/lib/server/firebase";
@@ -78,7 +78,37 @@ async function ensureApprovedUserState(userId: string): Promise<string | null> {
 }
 
 export const GET = buildGetOne("verificationRequests");
-export const DELETE = buildDelete("verificationRequests");
+
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const g = guard(req);
+  if (g) return g;
+
+  const { id } = await ctx.params;
+  let existing: VerificationDoc | null;
+  try {
+    existing = await getDoc<VerificationDoc>("verificationRequests", id);
+  } catch (e) {
+    return error("delete_failed", 500, { detail: String((e as Error).message) });
+  }
+  if (!existing) return error("not_found", 404);
+
+  try {
+    if (existing.status === "approved" && existing.userId) {
+      await db().collection("users").doc(existing.userId).set(
+        {
+          verified: false,
+          bmidNumber: null,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    }
+    await deleteDoc("verificationRequests", id);
+    return json({ id, deleted: true, revokedUserId: existing.status === "approved" ? existing.userId || null : null });
+  } catch (e) {
+    return error("delete_failed", 500, { detail: String((e as Error).message) });
+  }
+}
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const g = guard(req);

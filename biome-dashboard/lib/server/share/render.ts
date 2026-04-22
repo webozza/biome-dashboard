@@ -336,7 +336,7 @@ export function renderOgPage(args: RenderArgs): string {
 
   var banner = document.getElementById("app-banner");
   var bannerBtn = document.getElementById("app-banner-btn");
-  if (banner && isAndroid) banner.style.display = "flex";
+  if (banner && (isAndroid || isIOS)) banner.style.display = "flex";
   if (bannerBtn) {
     bannerBtn.addEventListener("click", function(){
       var dl = ${JSON.stringify(deepLink)};

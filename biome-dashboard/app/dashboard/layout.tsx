@@ -14,14 +14,18 @@ export default function DashboardLayout({
   const router = useRouter();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const initialized = useAuthStore((s) => s.initialized);
+  const isAdmin = useAuthStore((s) => s.user?.isAdmin ?? false);
 
   useEffect(() => {
-    if (initialized && !isAuthenticated) {
+    if (!initialized) return;
+    if (!isAuthenticated) {
       router.push("/login");
+    } else if (!isAdmin) {
+      router.replace("/bmid");
     }
-  }, [initialized, isAuthenticated, router]);
+  }, [initialized, isAuthenticated, isAdmin, router]);
 
-  if (!initialized || !isAuthenticated) {
+  if (!initialized || !isAuthenticated || !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-6 h-6 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />

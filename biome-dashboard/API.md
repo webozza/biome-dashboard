@@ -25,12 +25,12 @@ Next.js App Router route handlers under `app/api/*`, backed by Firebase Admin (F
 
 ## Auth
 
-Every route except `/api/health` and `/api/auth/login` requires a bearer token matching `ADMIN_API_TOKEN`.
+Two auth modes coexist:
 
-```
-Authorization: Bearer <ADMIN_API_TOKEN>
-```
-(or the header `X-Admin-Token: <token>`)
+1. **Admin-token endpoints** (`/api/verification`, `/api/content`, `/api/voting`, `/api/duality`, `/api/bmid-box/admin/*`, …) require `Authorization: Bearer <ADMIN_API_TOKEN>` (or header `X-Admin-Token: <token>`).
+2. **User endpoints** under `/api/bmid/*` require `Authorization: Bearer <firebaseIdToken>` — verified via `requireFirebaseUser`.
+
+The admin token is **not a shared secret** handed out at login — it's issued server-side at `POST /api/auth/session` **only when** the signed-in Firebase user's email is in the `ADMIN_EMAILS` env var. Everyone else signs in successfully but gets `token: null` (non-admin session).
 
 ## Pagination
 
@@ -57,11 +57,11 @@ Response shape:
 `GET /api/health` — no auth. Returns `{ ok, service, time }`.
 
 ### Auth
-`POST /api/auth/login`
-```json
-{ "email": "root@biome.io", "password": "change-me" }
-```
-→ `{ "token": "...", "user": { ... } }` — use `token` as `ADMIN_API_TOKEN` bearer.
+`POST /api/auth/session` — requires `Authorization: Bearer <firebaseIdToken>`.
+
+→ `{ "token": "<ADMIN_API_TOKEN>" | null, "user": { "uid", "email", "role": "super_admin"|"readonly", "isAdmin": boolean } }`
+
+`token` is non-null only when the email is listed in `ADMIN_EMAILS`. Use it as the `Authorization: Bearer` value for admin-token endpoints.
 
 ### Dashboard
 `GET /api/dashboard/stats` — aggregate counts for the overview page.

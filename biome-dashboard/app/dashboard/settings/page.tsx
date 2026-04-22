@@ -1,9 +1,146 @@
 "use client";
 
-import { useState } from "react";
-import { Settings, Save } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Settings, Save, Mail, Loader2, CheckCircle2, AlertCircle, Plug, Trash2, Send } from "lucide-react";
+import { useAuthStore } from "@/lib/stores/auth-store";
+
+type GmailStatus = {
+  configured: boolean;
+  connected: boolean;
+  email: string | null;
+  connectedAt?: string | null;
+  connectedBy?: string | null;
+  reason?: string;
+};
 
 export default function SettingsPage() {
+  const apiToken = useAuthStore((s) => s.apiToken);
+  const user = useAuthStore((s) => s.user);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [gmailStatus, setGmailStatus] = useState<GmailStatus | null>(null);
+  const [gmailLoading, setGmailLoading] = useState(true);
+  const [gmailAction, setGmailAction] = useState<"connect" | "disconnect" | "test" | null>(null);
+  const [gmailError, setGmailError] = useState<string | null>(null);
+  const [gmailNotice, setGmailNotice] = useState<string | null>(null);
+  const [testTarget, setTestTarget] = useState<string>("");
+
+  const fetchGmailStatus = async () => {
+    if (!apiToken) return;
+    try {
+      setGmailLoading(true);
+      const resp = await fetch("/api/settings/gmail", {
+        headers: { authorization: `Bearer ${apiToken}` },
+      });
+      const data = (await resp.json()) as GmailStatus;
+      setGmailStatus(data);
+      setGmailError(null);
+    } catch (e) {
+      setGmailError((e as Error).message);
+    } finally {
+      setGmailLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchGmailStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiToken]);
+
+  useEffect(() => {
+    if (!searchParams) return;
+    const status = searchParams.get("gmail");
+    if (!status) return;
+    if (status === "connected") setGmailNotice("Gmail account connected successfully.");
+    else if (status === "error") {
+      const detail = searchParams.get("detail");
+      setGmailError(detail ? decodeURIComponent(detail) : "Google returned an error.");
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete("gmail");
+    url.searchParams.delete("detail");
+    router.replace(url.pathname + (url.searchParams.toString() ? `?${url.searchParams}` : ""));
+    void fetchGmailStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const handleConnectGmail = async () => {
+    if (!apiToken) return;
+    try {
+      setGmailAction("connect");
+      setGmailError(null);
+      const resp = await fetch("/api/settings/gmail/auth-url", {
+        headers: { authorization: `Bearer ${apiToken}` },
+      });
+      if (!resp.ok) {
+        const data = (await resp.json().catch(() => ({}))) as { detail?: string; error?: string };
+        throw new Error(data.detail || data.error || "Failed to get auth URL");
+      }
+      const { url } = (await resp.json()) as { url: string };
+      window.location.href = url;
+    } catch (e) {
+      setGmailError((e as Error).message);
+      setGmailAction(null);
+    }
+  };
+
+  const handleDisconnectGmail = async () => {
+    if (!apiToken) return;
+    if (!confirm("Disconnect the connected Gmail account? Emails will fall back to SMTP env vars.")) return;
+    try {
+      setGmailAction("disconnect");
+      setGmailError(null);
+      const resp = await fetch("/api/settings/gmail", {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${apiToken}` },
+      });
+      if (!resp.ok) throw new Error("Failed to disconnect");
+      setGmailNotice("Gmail account disconnected.");
+      await fetchGmailStatus();
+    } catch (e) {
+      setGmailError((e as Error).message);
+    } finally {
+      setGmailAction(null);
+    }
+  };
+
+  const handleTestGmail = async () => {
+    if (!apiToken) return;
+    const to = testTarget.trim() || user?.email || "";
+    if (!to) {
+      setGmailError("Enter an address to send the test email to.");
+      return;
+    }
+    try {
+      setGmailAction("test");
+      setGmailError(null);
+      const resp = await fetch("/api/settings/gmail/test", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ to }),
+      });
+      const data = (await resp.json()) as {
+        ok?: boolean;
+        transport?: string;
+        fromEmail?: string;
+        detail?: string;
+        error?: string;
+      };
+      if (!resp.ok || !data.ok) throw new Error(data.detail || data.error || "Send failed");
+      setGmailNotice(
+        `Test email sent to ${to} via ${data.transport}${data.fromEmail ? ` (from ${data.fromEmail})` : ""}.`
+      );
+    } catch (e) {
+      setGmailError((e as Error).message);
+    } finally {
+      setGmailAction(null);
+    }
+  };
+
   const [settings, setSettings] = useState({
     allowedPlatforms: ["tiktok", "instagram", "youtube", "facebook", "twitter"],
     voteThreshold: 50,
@@ -38,8 +175,112 @@ export default function SettingsPage() {
           className="btn-primary flex items-center gap-3"
         >
           <Save className="w-4 h-4" />
-          Synchronize Node
+          Save Settings
         </button>
+      </div>
+
+      {/* Gmail Integration */}
+      <div className="card p-8">
+        <div className="flex items-start justify-between gap-6 flex-wrap">
+          <div className="flex items-start gap-4 min-w-0">
+            <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 flex items-center justify-center shrink-0">
+              <Mail className="w-6 h-6" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-extrabold text-main tracking-tight text-lg">Gmail Integration</h3>
+              <p className="text-sm text-muted font-medium italic mt-1">
+                Connect a Google account so verification emails are sent from that inbox via Gmail API.
+              </p>
+              {gmailLoading ? (
+                <p className="text-xs text-muted mt-3 flex items-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Checking status…
+                </p>
+              ) : gmailStatus?.connected ? (
+                <div className="mt-4 flex items-center gap-2 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-primary" />
+                  <span className="font-bold text-main">{gmailStatus.email}</span>
+                  <span className="text-muted text-xs">connected</span>
+                </div>
+              ) : gmailStatus && !gmailStatus.configured ? (
+                <div className="mt-4 flex items-center gap-2 text-xs text-amber-400">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>OAuth not configured. {gmailStatus.reason}</span>
+                </div>
+              ) : (
+                <div className="mt-4 flex items-center gap-2 text-xs text-muted">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>No Gmail account connected. Falling back to SMTP env.</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 items-stretch min-w-[240px]">
+            {gmailStatus?.connected ? (
+              <>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="email"
+                    value={testTarget}
+                    onChange={(e) => setTestTarget(e.target.value)}
+                    placeholder={user?.email || "you@example.com"}
+                    className="flex-1 input-premium py-2.5"
+                  />
+                </div>
+                <button
+                  onClick={handleTestGmail}
+                  disabled={gmailAction === "test"}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all disabled:opacity-50"
+                >
+                  {gmailAction === "test" ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                  Send Test Email
+                </button>
+                <button
+                  onClick={handleDisconnectGmail}
+                  disabled={gmailAction === "disconnect"}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/30 text-red-400 text-xs font-bold uppercase tracking-widest hover:bg-red-500/10 transition-all disabled:opacity-50"
+                >
+                  {gmailAction === "disconnect" ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleConnectGmail}
+                disabled={gmailAction === "connect" || !gmailStatus?.configured}
+                className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {gmailAction === "connect" ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Plug className="w-4 h-4" />
+                )}
+                Connect Gmail
+              </button>
+            )}
+          </div>
+        </div>
+
+        {gmailNotice ? (
+          <div className="mt-4 px-4 py-3 rounded-xl bg-primary/5 border border-primary/20 text-xs font-bold text-primary flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            {gmailNotice}
+          </div>
+        ) : null}
+        {gmailError ? (
+          <div className="mt-4 px-4 py-3 rounded-xl bg-red-500/5 border border-red-500/20 text-xs font-bold text-red-400 flex items-center gap-2">
+            <AlertCircle className="w-3.5 h-3.5" />
+            {gmailError}
+          </div>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

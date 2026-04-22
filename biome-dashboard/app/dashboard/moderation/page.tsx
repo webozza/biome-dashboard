@@ -1,339 +1,528 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { AlertTriangle, Eye, CheckCircle, ShieldAlert, UserX, Flag, Trash2, XCircle } from "lucide-react";
-import { flaggedItems, postReports, blockedUsers, type FlaggedItem, type PostReport, type BlockedUser } from "@/lib/data/mock-data";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { useMemo, useState } from "react";
+import {
+  ShieldAlert,
+  Flag,
+  Trash2,
+  Loader2,
+  CheckCircle,
+  XCircle,
+  Eye,
+  Mail,
+  Calendar,
+  Link as LinkIcon,
+  FileText,
+} from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DataTable } from "@/components/ui/data-table";
 import { DetailDrawer } from "@/components/ui/detail-drawer";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
-import { useDashboardStore } from "@/lib/stores/dashboard-store";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { AuthGate } from "@/components/ui/auth-gate";
+import { useAuthStore } from "@/lib/stores/auth-store";
+import { readJson } from "@/lib/http";
 
-type TabType = "flagged" | "reports" | "blocked";
+type ReportStatus = "pending" | "reviewed" | "dismissed" | "actioned";
+
+type Report = {
+  id: string;
+  reporterId: string;
+  reporterEmail: string | null;
+  contentType: string;
+  contentId: string;
+  contentPath: string;
+  authorId: string;
+  reason: string;
+  additionalInfo: string | null;
+  status: ReportStatus;
+  createdAt: string | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  adminNotes: string | null;
+};
+
+type ReportsResponse = {
+  items: Report[];
+  total: number;
+  counts: { pending: number; reviewed: number; dismissed: number; actioned: number };
+};
+
+type TabKey = "pending" | "reviewed" | "all";
+
+const REASON_LABELS: Record<string, string> = {
+  spam: "Spam",
+  harassment: "Harassment",
+  hate_speech: "Hate speech",
+  nudity_sexual: "Nudity / Sexual",
+  violence: "Violence",
+  false_information: "False information",
+  other: "Other",
+};
+
+const REASON_OPTIONS = Object.entries(REASON_LABELS).map(([value, label]) => ({ value, label }));
+
+function formatDate(iso: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function timeAgo(iso: string | null) {
+  if (!iso) return "—";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
 
 export default function ModerationPage() {
-  const { searchQuery, setSearchQuery, activeFilters, setFilter, clearFilters, currentPage, setPage } = useDashboardStore();
-  const [activeTab, setActiveTab] = useState<TabType>("flagged");
-  const [selectedFlagged, setSelectedFlagged] = useState<FlaggedItem | null>(null);
-  const [selectedReport, setSelectedReport] = useState<PostReport | null>(null);
-  const [selectedBlocked, setSelectedBlocked] = useState<BlockedUser | null>(null);
-  
-  const itemsPerPage = 10;
+  const apiToken = useAuthStore((s) => s.apiToken);
+  const currentUser = useAuthStore((s) => s.user);
+  const queryClient = useQueryClient();
 
-  // Filtered data based on active tab
-  const filteredData = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    
-    if (activeTab === "flagged") {
-      let data = [...flaggedItems];
-      if (searchQuery) data = data.filter((r) => r.description.toLowerCase().includes(q) || r.id.toLowerCase().includes(q));
-      if (activeFilters.severity && activeFilters.severity !== "all") data = data.filter((r) => r.severity === activeFilters.severity);
-      if (activeFilters.type && activeFilters.type !== "all") data = data.filter((r) => r.type === activeFilters.type);
-      if (activeFilters.status && activeFilters.status !== "all") data = data.filter((r) => r.status === activeFilters.status);
-      return data;
-    } else if (activeTab === "reports") {
-      let data = [...postReports];
-      if (searchQuery) data = data.filter((r) => r.postTitle.toLowerCase().includes(q) || r.reporterName.toLowerCase().includes(q));
-      if (activeFilters.reason && activeFilters.reason !== "all") data = data.filter((r) => r.reason === activeFilters.reason);
-      if (activeFilters.status && activeFilters.status !== "all") data = data.filter((r) => r.status === activeFilters.status);
-      return data;
-    } else {
-      let data = [...blockedUsers];
-      if (searchQuery) data = data.filter((r) => r.userName.toLowerCase().includes(q) || r.reason.toLowerCase().includes(q));
-      return data;
-    }
-  }, [activeTab, searchQuery, activeFilters]);
+  const [tab, setTab] = useState<TabKey>("pending");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Report | null>(null);
+  const pageSize = 10;
 
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-  const pagedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const reportsQuery = useQuery({
+    queryKey: ["moderation", "reports", tab],
+    queryFn: async () => {
+      const params = new URLSearchParams({ status: tab });
+      const resp = await fetch(`/api/moderation/reports?${params}`, {
+        headers: { authorization: `Bearer ${apiToken}` },
+      });
+      return readJson<ReportsResponse>(resp);
+    },
+    enabled: Boolean(apiToken),
+  });
 
-  const flaggedColumns = [
-    { key: "id", label: "ID", render: (r: FlaggedItem) => <span className="font-mono text-[10px] text-muted">{r.id}</span> },
-    { key: "type", label: "Type", render: (r: FlaggedItem) => <span className="capitalize text-[10px] font-bold text-main px-2 py-0.5 bg-surface-hover rounded shadow-sm">{r.type}</span> },
-    { key: "description", label: "Description", render: (r: FlaggedItem) => <span className="text-main font-medium text-sm truncate max-w-[300px]">{r.description}</span> },
-    { key: "severity", label: "Severity", render: (r: FlaggedItem) => <StatusBadge status={r.severity} /> },
-    { key: "status", label: "Status", render: (r: FlaggedItem) => <StatusBadge status={r.status} /> },
-    { key: "flaggedAt", label: "Date", render: (r: FlaggedItem) => <span className="text-muted text-xs font-medium">{r.flaggedAt}</span> },
-  ];
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status, adminNotes }: { id: string; status: ReportStatus; adminNotes?: string }) => {
+      const resp = await fetch(`/api/moderation/reports/${id}`, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${apiToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ status, adminNotes: adminNotes ?? null, reviewerId: currentUser?.uid || "admin" }),
+      });
+      return readJson<unknown>(resp);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["moderation", "reports"] }),
+  });
 
-  const reportColumns = [
-    { key: "id", label: "ID", render: (r: PostReport) => <span className="font-mono text-[10px] text-muted">{r.id}</span> },
-    { key: "postTitle", label: "Post", render: (r: PostReport) => <span className="text-main font-medium">{r.postTitle}</span> },
-    { key: "reporterName", label: "Reporter", render: (r: PostReport) => (
-      <div className="flex items-center gap-2 text-main font-bold">
-        <div className="w-5 h-5 rounded-full bg-surface-hover flex items-center justify-center text-[10px]">{r.reporterName.charAt(0)}</div>
-        {r.reporterName}
-      </div>
-    )},
-    { key: "reason", label: "Reason", render: (r: PostReport) => <span className="capitalize text-xs font-bold text-muted bg-surface-hover px-2 py-0.5 rounded">{r.reason}</span> },
-    { key: "status", label: "Status", render: (r: PostReport) => <StatusBadge status={r.status} /> },
-    { key: "createdAt", label: "Date", render: (r: PostReport) => <span className="text-muted text-xs font-medium">{r.createdAt}</span> },
-  ];
+  const deleteContentMutation = useMutation({
+    mutationFn: async (report: Report) => {
+      const resp = await fetch(`/api/moderation/reports/${report.id}/delete-content`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ reviewerId: currentUser?.uid || "admin" }),
+      });
+      return readJson<{ deleted: boolean; alreadyGone: boolean }>(resp);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["moderation", "reports"] });
+      setPendingDelete(null);
+      setSelectedId(null);
+    },
+  });
 
-  const blockedColumns = [
-    { key: "userId", label: "User ID", render: (r: BlockedUser) => <span className="font-mono text-[10px] text-muted">{r.userId}</span> },
-    { key: "userName", label: "User Name", render: (r: BlockedUser) => <span className="text-main font-bold">{r.userName}</span> },
-    { key: "reason", label: "Reason", render: (r: BlockedUser) => <span className="text-muted text-sm italic">&ldquo;{r.reason}&rdquo;</span> },
-    { key: "blockedBy", label: "Blocked By", render: (r: BlockedUser) => <span className="text-xs font-bold text-primary">{r.blockedBy.toUpperCase()}</span> },
-    { key: "blockedAt", label: "Date", render: (r: BlockedUser) => <span className="text-muted text-xs font-medium">{r.blockedAt}</span> },
+  const allItems = reportsQuery.data?.items || [];
+  const counts = reportsQuery.data?.counts || { pending: 0, reviewed: 0, dismissed: 0, actioned: 0 };
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return allItems.filter((r) => {
+      if (q) {
+        const hay = [r.id, r.reporterEmail, r.reporterId, r.authorId, r.contentId, r.contentPath, r.additionalInfo, r.reason]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (filters.reason && filters.reason !== "all" && r.reason !== filters.reason) return false;
+      if (filters.contentType && filters.contentType !== "all" && r.contentType !== filters.contentType) return false;
+      return true;
+    });
+  }, [allItems, searchQuery, filters]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const rows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const selected = useMemo(() => allItems.find((r) => r.id === selectedId) || null, [allItems, selectedId]);
+
+  if (!apiToken) {
+    return <AuthGate icon={ShieldAlert} title="Safety & Moderation" subtitle="Sign in to review content reports" />;
+  }
+
+  const columns = [
+    {
+      key: "contentType",
+      label: "Type",
+      render: (r: Report) => (
+        <span className="capitalize text-[10px] font-bold text-main px-2 py-0.5 bg-surface-hover rounded border border-border">
+          {r.contentType || "—"}
+        </span>
+      ),
+    },
+    {
+      key: "reason",
+      label: "Reason",
+      render: (r: Report) => (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold">
+            <Flag className="w-3 h-3" />
+            {REASON_LABELS[r.reason] || r.reason || "—"}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "reporter",
+      label: "Reporter",
+      render: (r: Report) => (
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-main truncate">{r.reporterEmail || r.reporterId || "Anonymous"}</p>
+          {r.additionalInfo ? (
+            <p className="text-[11px] text-muted italic truncate">&ldquo;{r.additionalInfo}&rdquo;</p>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: "contentPath",
+      label: "Content",
+      render: (r: Report) => (
+        <code className="text-[10px] text-muted font-mono truncate block max-w-[260px]">{r.contentPath || "—"}</code>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (r: Report) => <StatusBadge status={r.status} />,
+    },
+    {
+      key: "createdAt",
+      label: "When",
+      render: (r: Report) => <span className="text-[11px] text-muted tabular-nums">{timeAgo(r.createdAt)}</span>,
+    },
   ];
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-primary/10 rounded-xl text-primary font-bold">
-            <ShieldAlert className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-main">Safety & Moderation</h1>
-            <p className="text-sm text-muted font-medium italic">Monitor ecosystem health and enforce policies</p>
-          </div>
+      <div className="flex items-center gap-3">
+        <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+          <ShieldAlert className="h-7 w-7" />
         </div>
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-main">Safety & Moderation</h1>
+          <p className="text-sm font-medium italic text-muted">
+            Review content reports submitted by users and take action on offending posts or reels.
+          </p>
+        </div>
+      </div>
 
-        {/* Desktop Tabs */}
-        <div className="hidden lg:flex gap-1 p-1 bg-surface-hover/50 border border-border rounded-xl">
-          {(["flagged", "reports", "blocked"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => { setActiveTab(tab); setPage(1); }}
-              className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${
-                activeTab === tab ? "bg-surface text-primary shadow-sm ring-1 ring-border" : "text-muted hover:text-main"
-              }`}
-            >
-              {tab} ({tab === "flagged" ? flaggedItems.length : tab === "reports" ? postReports.length : blockedUsers.length})
-            </button>
-          ))}
-        </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <TileButton
+          label="Pending"
+          value={counts.pending}
+          tone="amber"
+          active={tab === "pending"}
+          onClick={() => {
+            setTab("pending");
+            setCurrentPage(1);
+          }}
+        />
+        <TileButton
+          label="Reviewed"
+          value={counts.reviewed + counts.dismissed + counts.actioned}
+          tone="muted"
+          active={tab === "reviewed"}
+          onClick={() => {
+            setTab("reviewed");
+            setCurrentPage(1);
+          }}
+        />
+        <TileButton
+          label="Actioned"
+          value={counts.actioned}
+          tone="primary"
+          active={false}
+          onClick={() => {
+            setTab("reviewed");
+            setFilters((f) => ({ ...f }));
+            setCurrentPage(1);
+          }}
+        />
+        <TileButton
+          label="All"
+          value={counts.pending + counts.reviewed + counts.dismissed + counts.actioned}
+          tone="neutral"
+          active={tab === "all"}
+          onClick={() => {
+            setTab("all");
+            setCurrentPage(1);
+          }}
+        />
       </div>
 
       <div className="card">
         <div className="mb-6">
-          {activeTab === "flagged" && (
-            <SearchFilterBar
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              searchPlaceholder="Search flagged records..."
-              filters={[
-                { key: "severity", label: "Severity", options: [
-                  { value: "high", label: "High" },
-                  { value: "medium", label: "Medium" },
-                  { value: "low", label: "Low" },
-                ]},
-                { key: "type", label: "Type", options: [
-                  { value: "user", label: "User" },
-                  { value: "link", label: "Link" },
-                  { value: "voting", label: "Voting" },
-                  { value: "content", label: "Content" },
-                ]},
-                { key: "status", label: "Status", options: [
-                  { value: "open", label: "Open" },
-                  { value: "reviewed", label: "Reviewed" },
-                  { value: "resolved", label: "Resolved" },
-                ]},
-              ]}
-              activeFilters={activeFilters}
-              onFilterChange={setFilter}
-              onClearFilters={clearFilters}
-            />
-          )}
-          
-          {activeTab === "reports" && (
-            <SearchFilterBar
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              searchPlaceholder="Search user reports..."
-              filters={[
-                { key: "reason", label: "Reason", options: [
-                  { value: "spam", label: "Spam" },
-                  { value: "inappropriate", label: "Inappropriate" },
-                  { value: "harassment", label: "Harassment" },
-                  { value: "copyright", label: "Copyright" },
-                ]},
-                { key: "status", label: "Status", options: [
-                  { value: "pending", label: "Pending" },
-                  { value: "reviewed", label: "Reviewed" },
-                  { value: "actioned", label: "Actioned" },
-                  { value: "dismissed", label: "Dismissed" },
-                ]},
-              ]}
-              activeFilters={activeFilters}
-              onFilterChange={setFilter}
-              onClearFilters={clearFilters}
-            />
-          )}
-
-          {activeTab === "blocked" && (
-            <SearchFilterBar
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              searchPlaceholder="Search restricted accounts..."
-              filters={[]}
-              activeFilters={activeFilters}
-              onFilterChange={setFilter}
-              onClearFilters={clearFilters}
-            />
-          )}
+          <SearchFilterBar
+            searchQuery={searchQuery}
+            onSearchChange={(v) => {
+              setSearchQuery(v);
+              setCurrentPage(1);
+            }}
+            searchPlaceholder="Search reporter, author, content id, or details..."
+            filters={[
+              { key: "reason", label: "Reason", options: REASON_OPTIONS },
+              {
+                key: "contentType",
+                label: "Content",
+                options: [
+                  { value: "post", label: "Post" },
+                  { value: "reel", label: "Reel" },
+                ],
+              },
+            ]}
+            activeFilters={filters}
+            onFilterChange={(key, value) => {
+              setFilters((current) => ({ ...current, [key]: value }));
+              setCurrentPage(1);
+            }}
+            onClearFilters={() => {
+              setFilters({});
+              setCurrentPage(1);
+            }}
+          />
         </div>
 
-        <DataTable 
-          columns={(activeTab === "flagged" ? flaggedColumns : activeTab === "reports" ? reportColumns : blockedColumns) as any} 
-          data={pagedData as any} 
-          currentPage={currentPage} 
-          totalPages={totalPages} 
-          onPageChange={setPage} 
-          getId={(r: any) => r.id || r.userId} 
-          onRowClick={(r: any) => {
-            if (activeTab === "flagged") setSelectedFlagged(r);
-            else if (activeTab === "reports") setSelectedReport(r);
-            else setSelectedBlocked(r);
-          }} 
+        {reportsQuery.isError ? (
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300 mb-4">
+            Failed to load reports: {(reportsQuery.error as Error).message}
+          </div>
+        ) : null}
+
+        <DataTable
+          columns={columns}
+          data={rows}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filtered.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          getId={(r) => r.id}
+          onRowClick={(r) => setSelectedId(r.id)}
+          emptyMessage={
+            tab === "pending"
+              ? "No pending reports"
+              : tab === "reviewed"
+                ? "No reviewed reports"
+                : "No reports"
+          }
+          emptyDescription={
+            tab === "pending" && counts.reviewed + counts.dismissed + counts.actioned > 0
+              ? `All caught up. ${counts.reviewed + counts.dismissed + counts.actioned} report(s) in Reviewed — click the tile above to view.`
+              : "Nothing to show right now."
+          }
+          loading={reportsQuery.isLoading}
         />
       </div>
 
-      {/* Flagged Detail Drawer */}
-      <DetailDrawer open={!!selectedFlagged} onClose={() => setSelectedFlagged(null)} title={`Incident: ${selectedFlagged?.id || ""}`}>
-        {selectedFlagged && (
-          <div className="space-y-8 p-1">
-            <div className="grid grid-cols-2 gap-y-6 gap-x-4">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Asset Category</p>
-                <p className="font-extrabold text-main capitalize">{selectedFlagged.type}</p>
+      <DetailDrawer
+        open={!!selected}
+        onClose={() => setSelectedId(null)}
+        title={selected ? `Report ${selected.id.slice(0, 8)}…` : "Report"}
+      >
+        {selected && (
+          <div className="space-y-6 p-1">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Content Type" value={<span className="capitalize">{selected.contentType}</span>} />
+              <Field label="Status" value={<StatusBadge status={selected.status} />} />
+              <Field
+                label="Reason"
+                value={
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold">
+                    <Flag className="w-3 h-3" />
+                    {REASON_LABELS[selected.reason] || selected.reason || "—"}
+                  </span>
+                }
+              />
+              <Field label="Submitted" value={<span>{formatDate(selected.createdAt)}</span>} />
+            </div>
+
+            {selected.additionalInfo ? (
+              <div className="p-4 rounded-2xl border border-border bg-background">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-2">Reporter details</p>
+                <p className="text-sm italic text-main leading-relaxed">&ldquo;{selected.additionalInfo}&rdquo;</p>
               </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Criticality</p>
-                <StatusBadge status={selectedFlagged.severity} />
+            ) : null}
+
+            <div className="p-4 rounded-2xl border border-border bg-surface space-y-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Parties</p>
+              <div className="flex items-center gap-2 text-sm">
+                <Mail className="w-3.5 h-3.5 text-muted" />
+                <span className="text-main font-semibold truncate">
+                  {selected.reporterEmail || selected.reporterId || "Anonymous"}
+                </span>
+                <span className="text-[10px] text-muted ml-auto">reporter</span>
               </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Status</p>
-                <StatusBadge status={selectedFlagged.status} />
+              <div className="flex items-center gap-2 text-sm">
+                <FileText className="w-3.5 h-3.5 text-muted" />
+                <code className="text-xs text-main font-mono truncate">{selected.authorId || "—"}</code>
+                <span className="text-[10px] text-muted ml-auto">author</span>
               </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Occurrence</p>
-                <p className="text-sm font-medium">{selectedFlagged.flaggedAt}</p>
-              </div>
-              <div className="col-span-2">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Internal Reference</p>
-                <p className="text-sm font-mono font-bold text-primary px-3 py-1.5 bg-primary/5 rounded-lg border border-primary/10">{selectedFlagged.relatedId}</p>
+              <div className="flex items-center gap-2 text-sm">
+                <LinkIcon className="w-3.5 h-3.5 text-muted" />
+                <code className="text-[11px] text-muted font-mono truncate">{selected.contentPath || "—"}</code>
               </div>
             </div>
 
-            <div className="p-4 bg-background border border-border rounded-xl">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-3">Violation Details</p>
-              <p className="text-sm leading-relaxed text-main">{selectedFlagged.description}</p>
-            </div>
+            {selected.reviewedAt ? (
+              <div className="p-4 rounded-2xl border border-border bg-background space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Review log</p>
+                <p className="text-xs text-main flex items-center gap-2">
+                  <Calendar className="w-3 h-3" /> {formatDate(selected.reviewedAt)}
+                  {selected.reviewedBy ? <span className="text-muted ml-2">by {selected.reviewedBy}</span> : null}
+                </p>
+                {selected.adminNotes ? (
+                  <p className="text-xs text-muted italic">&ldquo;{selected.adminNotes}&rdquo;</p>
+                ) : null}
+              </div>
+            ) : null}
 
-            <div className="space-y-3 pt-4">
-              {selectedFlagged.status === "open" && (
-                <div className="flex gap-3">
-                  <button className="flex-1 flex items-center justify-center gap-2 py-3 bg-surface-hover text-main border border-border rounded-lg font-bold hover:bg-surface transition-all active:scale-95">
-                    <Eye className="w-4 h-4" /> Review
+            {selected.status === "pending" ? (
+              <div className="pt-2 border-t border-border space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() =>
+                      updateStatusMutation.mutate({ id: selected.id, status: "dismissed" })
+                    }
+                    disabled={updateStatusMutation.isPending}
+                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border bg-surface text-xs font-bold text-muted hover:bg-surface-hover hover:text-main transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    Dismiss
                   </button>
-                  <button className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary text-white rounded-lg font-bold shadow-lg shadow-emerald-500/10 hover:bg-emerald-600 transition-all active:scale-95">
-                    <CheckCircle className="w-4 h-4" /> Resolve
+                  <button
+                    onClick={() =>
+                      updateStatusMutation.mutate({ id: selected.id, status: "actioned" })
+                    }
+                    disabled={updateStatusMutation.isPending}
+                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs font-bold hover:bg-amber-500/15 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Take Action
                   </button>
                 </div>
-              )}
-              <button className="w-full flex items-center justify-center gap-2 py-3 border border-red-500/20 text-red-500 font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-500/5 transition-all active:scale-95">
-                <Trash2 className="w-4 h-4" /> Remove Content Asset
-              </button>
-            </div>
+                <button
+                  onClick={() => setPendingDelete(selected)}
+                  disabled={!selected.contentPath || deleteContentMutation.isPending}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-500/20 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {deleteContentMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Delete Content
+                </button>
+              </div>
+            ) : (
+              <div className="pt-2 border-t border-border">
+                <button
+                  onClick={() => updateStatusMutation.mutate({ id: selected.id, status: "reviewed" })}
+                  disabled={updateStatusMutation.isPending || selected.status === "reviewed"}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border text-xs font-bold text-muted hover:text-main hover:bg-surface-hover transition-all disabled:opacity-50"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  Mark as reviewed
+                </button>
+              </div>
+            )}
           </div>
         )}
       </DetailDrawer>
 
-      {/* Report Detail Drawer */}
-      <DetailDrawer open={!!selectedReport} onClose={() => setSelectedReport(null)} title={`Report Case: ${selectedReport?.id || ""}`}>
-        {selectedReport && (
-          <div className="space-y-8 p-1">
-            <div className="grid grid-cols-2 gap-y-6 gap-x-4">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Subject Asset</p>
-                <p className="font-bold text-main leading-tight">{selectedReport.postTitle}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Complainant</p>
-                <div className="flex items-center gap-2 text-sm font-bold text-main">
-                  <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px]">{selectedReport.reporterName.charAt(0)}</div>
-                  {selectedReport.reporterName}
-                </div>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Allegation</p>
-                <p className="text-xs font-bold text-muted uppercase bg-surface-hover px-2 py-0.5 rounded inline-block">{selectedReport.reason}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Case Status</p>
-                <StatusBadge status={selectedReport.status} />
-              </div>
-              <div className="col-span-2">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Target Resource ID</p>
-                <p className="text-sm font-mono font-bold text-primary px-3 py-1.5 bg-primary/5 rounded-lg border border-primary/10">{selectedReport.postId}</p>
-              </div>
-            </div>
+      <ConfirmModal
+        open={!!pendingDelete}
+        title="Delete reported content?"
+        message={
+          <span>
+            This will permanently delete the {pendingDelete?.contentType || "content"} at{" "}
+            <code className="text-[11px]">{pendingDelete?.contentPath}</code>. The report will be marked as{" "}
+            <strong>actioned</strong>. This cannot be undone.
+          </span>
+        }
+        confirmLabel={deleteContentMutation.isPending ? "Deleting…" : "Delete Content"}
+        tone="danger"
+        loading={deleteContentMutation.isPending}
+        onConfirm={() => pendingDelete && deleteContentMutation.mutate(pendingDelete)}
+        onCancel={() => setPendingDelete(null)}
+      />
+    </div>
+  );
+}
 
-            <div className="p-4 bg-background border border-border rounded-xl">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-3">Complainant Narrative</p>
-              <p className="text-sm leading-relaxed text-main italic font-medium">&ldquo;{selectedReport.details}&rdquo;</p>
-            </div>
+function TileButton({
+  label,
+  value,
+  tone,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  tone: "amber" | "primary" | "muted" | "neutral";
+  active: boolean;
+  onClick: () => void;
+}) {
+  const toneClasses: Record<typeof tone, string> = {
+    amber: "text-amber-500",
+    primary: "text-primary",
+    muted: "text-muted",
+    neutral: "text-main",
+  };
+  return (
+    <button
+      onClick={onClick}
+      className={`card p-5 text-left transition-all ${
+        active ? "border-primary/40 ring-2 ring-primary/20 shadow-lg" : "hover:border-primary/20"
+      }`}
+    >
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted">{label}</p>
+      <p className={`text-3xl font-extrabold mt-1 ${toneClasses[tone]}`}>{value}</p>
+    </button>
+  );
+}
 
-            <div className="space-y-3 pt-4">
-              {selectedReport.status === "pending" && (
-                <div className="flex flex-col gap-3">
-                  <div className="flex gap-3">
-                    <button className="flex-1 flex items-center justify-center gap-2 py-3 border border-red-500/20 text-red-500 font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-500/5 transition-all">
-                      <Trash2 className="w-4 h-4" /> Purge Post
-                    </button>
-                    <button className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-600 text-white font-bold rounded-lg shadow-lg shadow-red-500/20 hover:bg-red-700 transition-all">
-                      <UserX className="w-4 h-4" /> Restrict Author
-                    </button>
-                  </div>
-                  <button className="w-full flex items-center justify-center gap-2 py-3 border border-border text-muted font-bold rounded-lg hover:bg-surface-hover transition-all">
-                    <XCircle className="w-4 h-4" /> Dismiss Allegations
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </DetailDrawer>
-
-      {/* Blocked Detail Drawer */}
-      <DetailDrawer open={!!selectedBlocked} onClose={() => setSelectedBlocked(null)} title="Account Restriction Narrative">
-        {selectedBlocked && (
-          <div className="space-y-8 p-1">
-            <div className="flex items-center gap-5 p-5 bg-red-500/5 border border-red-500/20 rounded-2xl shadow-inner">
-              <div className="w-14 h-14 bg-red-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-red-500/20">
-                <UserX className="w-7 h-7" />
-              </div>
-              <div>
-                <p className="text-xl font-extrabold text-main uppercase tracking-tight">{selectedBlocked.userName}</p>
-                <p className="text-[10px] text-muted font-mono font-bold">{selectedBlocked.userId}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-y-6 gap-6">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Enforcing Admin</p>
-                <p className="text-sm font-bold text-main">{selectedBlocked.blockedBy.toUpperCase()}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Restriction Applied</p>
-                <p className="text-sm font-medium">{selectedBlocked.blockedAt}</p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-background border border-border rounded-xl">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-3">Enforcement Reason</p>
-              <p className="text-sm leading-relaxed text-main font-medium italic">&ldquo;{selectedBlocked.reason}&rdquo;</p>
-            </div>
-
-            <button className="w-full flex items-center justify-center gap-2 py-3 bg-primary text-white font-bold rounded-lg shadow-lg shadow-emerald-500/10 hover:bg-emerald-600 transition-all active:scale-95">
-              <ShieldAlert className="w-4 h-4" /> Restore Account Access
-            </button>
-          </div>
-        )}
-      </DetailDrawer>
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">{label}</p>
+      <div className="text-sm font-semibold text-main">{value}</div>
     </div>
   );
 }

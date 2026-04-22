@@ -21,6 +21,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DetailDrawer } from "@/components/ui/detail-drawer";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
 import { UserPicker, type UserPickerOption } from "@/components/ui/user-picker";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useDashboardStore } from "@/lib/stores/dashboard-store";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { readJson } from "@/lib/http";
@@ -219,6 +220,7 @@ export default function VerificationPage() {
   } = useDashboardStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<VerificationRequest | null>(null);
   const [adminNote, setAdminNote] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [pageCursors, setPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
@@ -338,7 +340,7 @@ export default function VerificationPage() {
       label: "BMID",
       render: (row: VerificationRequest) =>
         row.status === "approved" && row.bmidNumber ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-mono font-semibold">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary border border-primary text-white text-xs font-mono font-semibold">
             <ShieldCheck className="w-3 h-3" />
             {row.bmidNumber}
           </span>
@@ -355,6 +357,22 @@ export default function VerificationPage() {
       key: "createdAt",
       label: "Date",
       render: (row: VerificationRequest) => <span className="text-tertiary text-xs">{formatDate(row.createdAt)}</span>,
+    },
+    {
+      key: "actions",
+      label: "",
+      render: (row: VerificationRequest) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setPendingDelete(row);
+          }}
+          title="Delete verification request"
+          className="p-1.5 rounded-lg border border-red-500/20 text-red-500 hover:bg-red-500/10 transition-all active:scale-95"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      ),
     },
   ];
 
@@ -492,10 +510,12 @@ export default function VerificationPage() {
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <ShieldCheck className="w-6 h-6 text-accent" />
+          <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+            <ShieldCheck className="h-7 w-7" />
+          </div>
           <div>
-            <h1 className="text-xl font-bold">Verification Requests</h1>
-            <p className="text-sm text-tertiary">Review and manage BMID verification requests</p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-main">Verification Requests</h1>
+            <p className="text-sm font-medium italic text-muted">Review and manage BMID verification requests</p>
           </div>
         </div>
         <button
@@ -620,7 +640,7 @@ export default function VerificationPage() {
               {selected.status === "approved" && selected.bmidNumber && (
                 <div>
                   <p className="text-xs text-tertiary mb-1">BMID Number</p>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm font-mono font-semibold">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary border border-primary text-white text-sm font-mono font-semibold">
                     <ShieldCheck className="w-3.5 h-3.5" />
                     {selected.bmidNumber}
                   </span>
@@ -642,7 +662,7 @@ export default function VerificationPage() {
 
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <ShieldCheck className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                 <p className="text-xs font-semibold text-secondary uppercase tracking-wider">Submitted Proofs</p>
               </div>
 
@@ -653,7 +673,7 @@ export default function VerificationPage() {
                     href={selected.profileUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-sm text-emerald-400 underline-offset-2 hover:underline break-all"
+                    className="text-sm text-emerald-700 dark:text-emerald-400 underline-offset-2 hover:underline break-all"
                   >
                     {selected.profileUrl}
                   </a>
@@ -676,7 +696,7 @@ export default function VerificationPage() {
                 {typeof selected.activeOneYear === "boolean" ? (
                   <div>
                     <p className="text-xs text-tertiary mb-1">Active ≥ 1 year?</p>
-                    <p className={`text-sm font-medium ${selected.activeOneYear ? "text-emerald-300" : "text-red-300"}`}>
+                    <p className={`text-sm font-semibold ${selected.activeOneYear ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
                       {selected.activeOneYear ? "Yes" : "No"}
                     </p>
                   </div>
@@ -684,7 +704,7 @@ export default function VerificationPage() {
                 {typeof selected.representsRealIdentity === "boolean" ? (
                   <div>
                     <p className="text-xs text-tertiary mb-1">Real person/identity?</p>
-                    <p className={`text-sm font-medium ${selected.representsRealIdentity ? "text-emerald-300" : "text-amber-300"}`}>
+                    <p className={`text-sm font-semibold ${selected.representsRealIdentity ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
                       {selected.representsRealIdentity ? "Yes" : "No (entertainment/AI)"}
                     </p>
                   </div>
@@ -729,7 +749,7 @@ export default function VerificationPage() {
                     href={selected.screenshotUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-sm text-emerald-400 underline-offset-2 hover:underline break-all"
+                    className="text-sm text-emerald-700 dark:text-emerald-400 underline-offset-2 hover:underline break-all"
                   >
                     {selected.screenshotUrl}
                   </a>
@@ -737,7 +757,7 @@ export default function VerificationPage() {
               ) : null}
 
               {selected.agreementAccepted ? (
-                <div className="flex items-center gap-2 text-xs text-emerald-300">
+                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
                   <CheckCircle className="w-3.5 h-3.5" />
                   User confirmed this is their real account.
                 </div>
@@ -794,7 +814,7 @@ export default function VerificationPage() {
                   <button
                     onClick={() => void handleStatusUpdate("approved")}
                     disabled={isMutating}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-accent/10 text-accent border border-accent/20 rounded-xl text-sm hover:bg-accent/20 transition-colors disabled:opacity-60"
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-500/20 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-500/40 dark:border-emerald-500/20 rounded-xl text-sm font-semibold hover:bg-emerald-500/30 dark:hover:bg-emerald-500/20 transition-colors disabled:opacity-60"
                   >
                     {patchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                     Approve
@@ -802,7 +822,7 @@ export default function VerificationPage() {
                   <button
                     onClick={() => void handleStatusUpdate("rejected")}
                     disabled={isMutating}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-sm hover:bg-red-500/20 transition-colors disabled:opacity-60"
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-500/20 text-red-800 dark:bg-red-500/10 dark:text-red-300 border border-red-500/40 dark:border-red-500/20 rounded-xl text-sm font-semibold hover:bg-red-500/30 dark:hover:bg-red-500/20 transition-colors disabled:opacity-60"
                   >
                     {patchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                     Reject
@@ -813,7 +833,7 @@ export default function VerificationPage() {
                 <button
                   onClick={() => void handleStatusUpdate("removed")}
                   disabled={isMutating}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl text-sm hover:bg-amber-500/20 transition-colors disabled:opacity-60"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-amber-500/25 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300 border border-amber-500/50 dark:border-amber-500/20 rounded-xl text-sm font-semibold hover:bg-amber-500/35 dark:hover:bg-amber-500/20 transition-colors disabled:opacity-60"
                 >
                   {patchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
                   Remove Verification
@@ -824,7 +844,7 @@ export default function VerificationPage() {
             <button
               onClick={() => void deleteMutation.mutateAsync(selected.id)}
               disabled={isMutating}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-500/5 text-red-300 border border-red-500/15 rounded-xl text-sm hover:bg-red-500/10 transition-colors disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-500/15 text-red-800 dark:bg-red-500/5 dark:text-red-300 border border-red-500/40 dark:border-red-500/15 rounded-xl text-sm font-semibold hover:bg-red-500/25 dark:hover:bg-red-500/10 transition-colors disabled:opacity-60"
             >
               {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
               Delete Request
@@ -1092,6 +1112,38 @@ export default function VerificationPage() {
           </div>
         </div>
       </DetailDrawer>
+
+      <ConfirmModal
+        open={!!pendingDelete}
+        title={
+          pendingDelete?.status === "approved"
+            ? `Remove ${pendingDelete?.userName || "verified user"}?`
+            : `Delete verification request?`
+        }
+        message={
+          pendingDelete?.status === "approved" ? (
+            <span>
+              This deletes the verification record for <strong>{pendingDelete.userName}</strong>
+              {pendingDelete.bmidNumber ? ` (${pendingDelete.bmidNumber})` : ""}. The user will lose
+              their verified status and BMID number.
+            </span>
+          ) : (
+            <span>
+              This permanently deletes the verification request for{" "}
+              <strong>{pendingDelete?.userName || "this user"}</strong>.
+            </span>
+          )
+        }
+        confirmLabel={deleteMutation.isPending ? "Deleting…" : "Delete"}
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={async () => {
+          if (!pendingDelete) return;
+          await deleteMutation.mutateAsync(pendingDelete.id);
+          setPendingDelete(null);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

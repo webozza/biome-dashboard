@@ -11,31 +11,25 @@ import {
 } from "firebase/auth";
 import { auth } from "@/lib/firebase-client";
 
+type Role = "super_admin" | "readonly";
+
+interface SessionUser {
+  uid: string;
+  name: string;
+  email: string;
+  photoURL: string | null;
+  role: Role;
+  isAdmin: boolean;
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   initialized: boolean;
   apiToken: string | null;
-  user: {
-    uid: string;
-    name: string;
-    email: string;
-    photoURL: string | null;
-    role: "super_admin" | "moderator" | "readonly";
-  } | null;
+  user: SessionUser | null;
   login: (email: string, password: string) => Promise<boolean>;
   loginWithGoogle: () => Promise<boolean>;
   logout: () => Promise<void>;
-}
-
-function mapUser(u: User | null) {
-  if (!u) return null;
-  return {
-    uid: u.uid,
-    name: u.displayName || u.email?.split("@")[0] || "Admin",
-    email: u.email || "",
-    photoURL: u.photoURL || null,
-    role: "super_admin" as const,
-  };
 }
 
 const API_TOKEN_STORAGE_KEY = "biome-admin-api-token";
@@ -54,7 +48,12 @@ function writeStoredApiToken(token: string | null) {
   }
 }
 
-async function exchangeIdTokenForApiToken(u: User): Promise<string | null> {
+type SessionResponse = {
+  token: string | null;
+  user: { uid: string; email: string | null; role: Role; isAdmin: boolean };
+};
+
+async function exchangeSession(u: User): Promise<SessionResponse | null> {
   try {
     const idToken = await u.getIdToken();
     const resp = await fetch("/api/auth/session", {
@@ -62,11 +61,44 @@ async function exchangeIdTokenForApiToken(u: User): Promise<string | null> {
       headers: { authorization: `Bearer ${idToken}` },
     });
     if (!resp.ok) return null;
-    const data = (await resp.json()) as { token?: string };
-    return data.token ?? null;
+    return (await resp.json()) as SessionResponse;
   } catch {
     return null;
   }
+}
+
+function buildUser(u: User, session: SessionResponse): SessionUser {
+  return {
+    uid: u.uid,
+    name: u.displayName || u.email?.split("@")[0] || "User",
+    email: u.email || session.user.email || "",
+    photoURL: u.photoURL || null,
+    role: session.user.role,
+    isAdmin: session.user.isAdmin,
+  };
+}
+
+async function applySession(u: User) {
+  const session = await exchangeSession(u);
+  if (!session) {
+    await signOut(auth).catch(() => undefined);
+    writeStoredApiToken(null);
+    useAuthStore.setState({
+      isAuthenticated: false,
+      user: null,
+      initialized: true,
+      apiToken: null,
+    });
+    return false;
+  }
+  writeStoredApiToken(session.token);
+  useAuthStore.setState({
+    isAuthenticated: true,
+    user: buildUser(u, session),
+    initialized: true,
+    apiToken: session.token,
+  });
+  return true;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -77,28 +109,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password) => {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
-      const resp = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      let apiToken: string | null = null;
-      if (resp.ok) {
-        const data = (await resp.json()) as { token?: string };
-        apiToken = data.token ?? null;
-      }
-      if (!apiToken) {
-        apiToken = await exchangeIdTokenForApiToken(cred.user);
-      }
-      if (!apiToken) throw new Error("missing_api_token");
-      writeStoredApiToken(apiToken);
-      set({
-        isAuthenticated: true,
-        user: mapUser(cred.user),
-        initialized: true,
-        apiToken,
-      });
-      return true;
+      return await applySession(cred.user);
     } catch {
       await signOut(auth).catch(() => undefined);
       writeStoredApiToken(null);
@@ -108,18 +119,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   loginWithGoogle: async () => {
     try {
-      const provider = new GoogleAuthProvider();
-      const cred = await signInWithPopup(auth, provider);
-      const apiToken = await exchangeIdTokenForApiToken(cred.user);
-      if (!apiToken) throw new Error("missing_api_token");
-      writeStoredApiToken(apiToken);
-      set({
-        isAuthenticated: true,
-        user: mapUser(cred.user),
-        initialized: true,
-        apiToken,
-      });
-      return true;
+      const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+      return await applySession(cred.user);
     } catch {
       await signOut(auth).catch(() => undefined);
       writeStoredApiToken(null);
@@ -146,18 +147,6 @@ if (typeof window !== "undefined") {
       });
       return;
     }
-
-    let apiToken = readStoredApiToken();
-    if (!apiToken) {
-      apiToken = await exchangeIdTokenForApiToken(u);
-      if (apiToken) writeStoredApiToken(apiToken);
-    }
-
-    useAuthStore.setState({
-      isAuthenticated: true,
-      user: mapUser(u),
-      initialized: true,
-      apiToken,
-    });
+    await applySession(u);
   });
 }

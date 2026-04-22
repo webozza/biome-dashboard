@@ -54,7 +54,6 @@ export function MetricCard({
         <p className="text-muted text-[10px] font-black tracking-[0.2em] uppercase opacity-60 mb-2">{title}</p>
         <div className="flex items-baseline gap-2">
           <h3 className="text-3xl font-black text-white italic tracking-tighter">{value}</h3>
-          <span className="text-[10px] font-bold text-muted uppercase">Nodes</span>
         </div>
         {subtitle && <p className="text-muted text-[10px] mt-2 font-bold tracking-tight italic opacity-40">{subtitle}</p>}
       </div>

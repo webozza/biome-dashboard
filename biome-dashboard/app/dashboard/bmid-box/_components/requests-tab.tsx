@@ -15,9 +15,11 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 import {
   createBmidBoxRequest,
   fetchBmidBoxRequests,
+  postBmidBoxAction,
   resetBmidBoxRequestsApi,
   seedBmidBoxRequestsApi,
 } from "@/lib/bmid-box-client";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { formatDate } from "@/lib/format";
 import { Box } from "lucide-react";
 
@@ -63,8 +65,28 @@ export function RequestsTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<CreateFormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const deferredSearch = useDeferredValue(searchQuery);
   const pageSize = 10;
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(
+        ids.map((id) =>
+          postBmidBoxAction<unknown>(apiToken!, `/api/bmid-box/requests/${id}/remove`, {
+            actorName: "Admin",
+            removalReason: "Removed via bulk delete",
+          })
+        )
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
+      setSelectedIds([]);
+      setConfirmDelete(false);
+    },
+  });
 
   const listQuery = useQuery({
     queryKey: ["bmid-box", "requests"],
@@ -152,7 +174,11 @@ export function RequestsTab() {
         .toLowerCase();
 
       if (q && !searchHaystack.includes(q)) return false;
-      if (filters.status && filters.status !== "all" && request.currentStatus !== filters.status) return false;
+      if (filters.status && filters.status !== "all") {
+        if (request.currentStatus !== filters.status) return false;
+      } else if (request.currentStatus === "removed") {
+        return false;
+      }
       if (filters.type && filters.type !== "all" && request.type !== filters.type) return false;
       if (filters.platform && filters.platform !== "all" && request.sourcePlatform !== filters.platform) return false;
       if (filters.ownerVerified === "verified" && !request.ownerVerified) return false;
@@ -360,6 +386,8 @@ export function RequestsTab() {
             setFilters({});
             setCurrentPage(1);
           }}
+          selectedCount={selectedIds.length}
+          onBulkDelete={() => setConfirmDelete(true)}
         />
 
         <DataTable
@@ -370,6 +398,13 @@ export function RequestsTab() {
           totalItems={filtered.length}
           onPageChange={setCurrentPage}
           getId={(request) => request.id}
+          selectedItems={selectedIds}
+          onToggleItem={(id) =>
+            setSelectedIds((current) =>
+              current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
+            )
+          }
+          onSelectAll={(ids) => setSelectedIds(ids)}
           onRowClick={(request) => {
             window.location.href = `/dashboard/bmid-box/requests/${request.id}`;
           }}
@@ -553,6 +588,17 @@ export function RequestsTab() {
         </>,
         document.body
       ) : null}
+
+      <ConfirmModal
+        open={confirmDelete}
+        title={`Remove ${selectedIds.length} Box request${selectedIds.length === 1 ? "" : "s"}?`}
+        message="Selected requests will be marked as removed. This keeps the audit trail but hides them from the active queue."
+        confirmLabel={bulkDeleteMutation.isPending ? "Removing…" : "Remove"}
+        tone="danger"
+        loading={bulkDeleteMutation.isPending}
+        onConfirm={() => bulkDeleteMutation.mutate(selectedIds)}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

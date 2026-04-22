@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bell, Search, User, LogOut, Settings, Shield, ChevronDown, UserCircle, Sun, Moon } from "lucide-react";
+import { Bell, User, LogOut, Settings, Shield, ChevronDown, UserCircle, Sun, Moon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useThemeStore } from "@/lib/stores/theme-store";
@@ -48,24 +48,7 @@ export function Header() {
   }, []);
 
   return (
-    <header className="topbar px-8 py-4 flex items-center justify-between">
-      {/* Search Architecture */}
-      <div className="relative group max-w-md w-full">
-        <div className="absolute inset-0 bg-primary/5 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
-        <div className="relative flex items-center">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted group-focus-within:text-primary transition-colors" />
-          <input
-            type="text"
-            placeholder="Search ecosystem..."
-            className="w-full pl-11 pr-14 py-2.5 rounded-xl border border-border bg-background focus:outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/5 transition-all text-xs font-bold tracking-tight text-main placeholder:text-muted/50"
-          />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1">
-            <kbd className="px-1.5 py-0.5 rounded text-[9px] font-black bg-surface border border-border text-muted shadow-sm">⌘</kbd>
-            <kbd className="px-1.5 py-0.5 rounded text-[9px] font-black bg-surface border border-border text-muted shadow-sm">/</kbd>
-          </div>
-        </div>
-      </div>
-
+    <header className="topbar px-8 py-4 flex items-center justify-end">
       <div className="flex items-center gap-5">
         {/* Global Utilities */}
         <div className="flex items-center bg-surface p-1 rounded-xl border border-border shadow-sm">
@@ -152,11 +135,7 @@ export function Header() {
               </div>
             </div>
             <div className="text-left hidden md:block">
-              <p className="text-xs font-black text-main uppercase tracking-tight leading-none mb-1">{user?.name || "Root Admin"}</p>
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                <p className="text-[9px] font-black text-primary uppercase tracking-[0.1em]">Security Level 07</p>
-              </div>
+              <p className="text-xs font-black text-main uppercase tracking-tight leading-none">{user?.name || "Admin"}</p>
             </div>
             <ChevronDown className={`w-3.5 h-3.5 text-muted transition-transform duration-300 ${showProfile ? 'rotate-180' : ''}`} />
           </button>

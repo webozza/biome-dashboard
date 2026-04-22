@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { auth } from "@/lib/firebase-client";
 import { useAuthStore } from "@/lib/stores/auth-store";
 
 export default function BmidLoginPage() {
   const router = useRouter();
   const initialized = useAuthStore((s) => s.initialized);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const login = useAuthStore((s) => s.login);
+  const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -25,26 +25,24 @@ export default function BmidLoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
+    const ok = await login(email, password);
+    setLoading(false);
+    if (ok) {
       router.replace("/bmid");
-    } catch {
+    } else {
       setError("Sign in failed.");
-    } finally {
-      setLoading(false);
     }
   }
 
   async function handleGoogle() {
     setError("");
     setLoading(true);
-    try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
+    const ok = await loginWithGoogle();
+    setLoading(false);
+    if (ok) {
       router.replace("/bmid");
-    } catch {
+    } else {
       setError("Google sign-in failed.");
-    } finally {
-      setLoading(false);
     }
   }
 

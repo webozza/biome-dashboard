@@ -111,7 +111,7 @@ export function SearchFilterBar({
             className="btn-secondary h-[48px] flex items-center justify-center gap-2 px-6"
           >
             <Download className="w-4 h-4" />
-            <span className="mt-0.5">Export Node Data</span>
+            <span className="mt-0.5">Export Data</span>
           </button>
         )}
       </div>

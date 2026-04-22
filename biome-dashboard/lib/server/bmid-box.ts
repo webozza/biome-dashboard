@@ -177,13 +177,14 @@ export async function patchBmidBoxSettings(patch: Partial<BmidBoxSettings>) {
 
 export async function getBmidBoxSummary() {
   const requests = await listBmidBoxRequests();
+  const active = requests.filter((request) => request.currentStatus !== "removed");
   return {
-    total: requests.length,
-    pendingAdminReview: requests.filter((request) => request.currentStatus === "pending_admin_review").length,
-    pendingTaggedUser: requests.filter((request) => request.currentStatus === "pending_tagged_user").length,
-    pendingVoting: requests.filter((request) => request.currentStatus === "pending_voting").length,
-    approved: requests.filter((request) => request.currentStatus === "approved").length,
-    refused: requests.filter((request) => request.currentStatus === "refused").length,
+    total: active.length,
+    pendingAdminReview: active.filter((request) => request.currentStatus === "pending_admin_review").length,
+    pendingTaggedUser: active.filter((request) => request.currentStatus === "pending_tagged_user").length,
+    pendingVoting: active.filter((request) => request.currentStatus === "pending_voting").length,
+    approved: active.filter((request) => request.currentStatus === "approved").length,
+    refused: active.filter((request) => request.currentStatus === "refused").length,
     removed: requests.filter((request) => request.currentStatus === "removed").length,
   };
 }

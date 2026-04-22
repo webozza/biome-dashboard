@@ -16,7 +16,6 @@ import {
   Settings,
   LogOut,
   ChevronLeft,
-  Hexagon,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useDashboardStore } from "@/lib/stores/dashboard-store";
@@ -44,6 +43,7 @@ const navSections = [
       { href: "/dashboard/bmid/respond", label: "Tagged Response", icon: GitBranch },
       { href: "/dashboard/moderation", label: "Moderation", icon: AlertTriangle },
       { href: "/dashboard/users", label: "Users", icon: Users },
+      { href: "/dashboard/posts", label: "Posts", icon: FileText },
     ],
   },
   {
@@ -70,8 +70,9 @@ export function Sidebar() {
       {/* Branding Node */}
       <div className="h-[80px] flex items-center px-6 border-b border-border relative overflow-hidden">
         <div className="absolute inset-0 bg-primary/5 blur-xl opacity-20" />
-        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary via-emerald-700 to-emerald-900 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/10 ring-1 ring-white/10 z-10 transition-transform hover:scale-105 active:scale-95 cursor-pointer">
-          <Hexagon className="w-5.5 h-5.5 text-white" strokeWidth={2.5} />
+        <div className="w-10 h-10 rounded-2xl overflow-hidden shrink-0 shadow-lg shadow-emerald-500/10 ring-1 ring-white/10 z-10 transition-transform hover:scale-105 active:scale-95 cursor-pointer">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icon.png" alt="BiomeAdmin" className="w-full h-full object-cover" />
         </div>
 
         {sidebarOpen && (
@@ -79,7 +80,6 @@ export function Sidebar() {
             <span className="font-black text-lg tracking-tighter text-main uppercase italic">
               BIOME<span className="text-primary tracking-[0.2em] ml-1">ADMIN</span>
             </span>
-            <span className="text-[8px] font-black tracking-[0.4em] uppercase text-muted leading-none -mt-0.5 opacity-50">Core Terminal</span>
           </div>
         )}
 
@@ -177,10 +177,14 @@ export function Sidebar() {
             />
           </div>
 
-          {sidebarOpen ? (
+          {sidebarOpen && (user?.name || user?.email) ? (
             <div className="flex-1 min-w-0 animate-fade-in">
-              <p className="text-[10px] font-black uppercase text-main tracking-tight truncate leading-none mb-1">{user?.name || "Admin Authority"}</p>
-              <p className="text-[9px] font-bold text-muted truncate italic opacity-70">{user?.email || "root@biome.io"}</p>
+              {user?.name && (
+                <p className="text-[10px] font-black uppercase text-main tracking-tight truncate leading-none mb-1">{user.name}</p>
+              )}
+              {user?.email && (
+                <p className="text-[9px] font-bold text-muted truncate italic opacity-70">{user.email}</p>
+              )}
             </div>
           ) : null}
 

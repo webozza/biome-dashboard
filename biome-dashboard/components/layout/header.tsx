@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bell, User, LogOut, Settings, Shield, ChevronDown, UserCircle, Sun, Moon } from "lucide-react";
+import { Bell, User, LogOut, Shield, ChevronDown, UserCircle, Sun, Moon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useThemeStore } from "@/lib/stores/theme-store";
@@ -174,22 +174,12 @@ export function Header() {
                   label="Profile"
                   onClick={() => { setShowProfile(false); router.push("/dashboard/profile"); }}
                 />
-                <ProfileMenuItem
-                  icon={Shield}
-                  label="Authentication Key"
-                  onClick={() => setShowProfile(false)}
-                />
-                <ProfileMenuItem 
-                  icon={Settings} 
-                  label="Node Parameters" 
-                  onClick={() => { setShowProfile(false); router.push("/dashboard/settings"); }} 
-                />
               </div>
               <div className="py-2">
-                <ProfileMenuItem 
-                  icon={LogOut} 
-                  label="Terminate Session" 
-                  danger 
+                <ProfileMenuItem
+                  icon={LogOut}
+                  label="Logout"
+                  danger
                   onClick={async () => { await logout(); router.push("/login"); }}
                 />
               </div>

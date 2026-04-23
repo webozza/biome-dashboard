@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -58,9 +58,15 @@ const navSections = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
   const { sidebarOpen, toggleSidebar } = useDashboardStore();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
+  };
 
   return (
     <aside
@@ -190,7 +196,7 @@ export function Sidebar() {
 
           {sidebarOpen && (
              <button 
-               onClick={() => logout()}
+               onClick={handleLogout}
                className="p-2 rounded-lg text-muted hover:text-red-400 hover:bg-red-400/10 transition-all active:scale-95 group/logout"
                title="Sign Out"
              >
@@ -200,7 +206,7 @@ export function Sidebar() {
 
           {!sidebarOpen && (
             <button 
-              onClick={() => logout()}
+              onClick={handleLogout}
               className="mt-2 p-2 rounded-lg text-muted hover:text-red-400 hover:bg-red-400/10 transition-all"
               title="Sign Out"
             >

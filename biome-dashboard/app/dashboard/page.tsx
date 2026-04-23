@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
   Users,
   ShieldCheck,
@@ -113,17 +112,6 @@ function ChartTooltip({
   );
 }
 
-function LiveClock() {
-  const [time, setTime] = useState<string>("");
-  useEffect(() => {
-    const tick = () => setTime(new Date().toLocaleTimeString());
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-  return <span className="text-main">{time || "—"}</span>;
-}
-
 export default function DashboardPage() {
   const apiToken = useAuthStore((s) => s.apiToken);
 
@@ -188,16 +176,11 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="px-4 py-2.5 bg-surface border border-border rounded-xl text-[10px] font-bold shadow-sm ring-1 ring-border/50">
-            <span className="text-muted mr-3 tracking-widest uppercase opacity-50">Heartbeat</span>
-            <LiveClock />
-          </div>
           <button
-            onClick={() => query.refetch()}
-            disabled={query.isFetching}
+            onClick={() => window.location.reload()}
             className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all active:scale-95 disabled:opacity-60"
           >
-            <TrendingUp className="w-4 h-4" /> {query.isFetching ? "Refreshing…" : "Refresh"}
+            <TrendingUp className="w-4 h-4" /> Refresh
           </button>
         </div>
       </div>

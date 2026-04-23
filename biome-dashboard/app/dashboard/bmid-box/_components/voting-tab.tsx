@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BmidBoxRequest } from "@/lib/data/bmid-box";
 import { DataTable } from "@/components/ui/data-table";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { postBmidBoxAction } from "@/lib/bmid-box-client";
 import { readJson } from "@/lib/http";
@@ -30,6 +32,8 @@ export function VotingTab() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const pageSize = 10;
 
   const query = useQuery({
@@ -50,6 +54,23 @@ export function VotingTab() {
         ...(body || {}),
       }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) =>
+      Promise.all(
+        ids.map((id) =>
+          postBmidBoxAction<unknown>(apiToken!, `/api/bmid-box/requests/${id}/remove`, {
+            actorName: user?.name || "Admin",
+            removalReason: "Removed via bulk delete",
+          })
+        )
+      ),
+    onSuccess: (_, ids) => {
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+      setPendingDelete(null);
       queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
     },
   });
@@ -129,10 +150,39 @@ export function VotingTab() {
       label: "Result",
       render: (request: BmidBoxRequest & { id: string }) => <span className="text-sm font-bold text-main">{finalResult(request)}</span>,
     },
+    {
+      key: "actions",
+      label: "",
+      render: (request: BmidBoxRequest & { id: string }) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setPendingDelete([request.id]);
+          }}
+          className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#ef4444] hover:bg-[#ef4444]/10 border border-transparent hover:border-[#ef4444]/20 transition-colors"
+          title="Remove request"
+          aria-label="Remove request"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      ),
+    },
   ];
 
   return (
     <div className="space-y-6">
+      {selectedIds.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setPendingDelete(selectedIds)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-[#ef4444]/15 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete {selectedIds.length}
+          </button>
+        </div>
+      )}
       <div className="grid gap-3 md:grid-cols-5">
         {[
           { label: "Open", value: filtered.filter((r) => r.votingStatus === "open").length },
@@ -194,6 +244,11 @@ export function VotingTab() {
           totalItems={filtered.length}
           onPageChange={setCurrentPage}
           getId={(request) => request.id}
+          selectedItems={selectedIds}
+          onToggleItem={(id) =>
+            setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+          }
+          onSelectAll={(ids) => setSelectedIds(ids)}
           onRowClick={(request) => {
             window.location.href = `/dashboard/bmid-box/requests/${request.id}`;
           }}
@@ -245,6 +300,33 @@ export function VotingTab() {
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        open={Boolean(pendingDelete && pendingDelete.length > 0)}
+        title={
+          pendingDelete && pendingDelete.length > 1
+            ? `Remove ${pendingDelete.length} requests?`
+            : "Remove request?"
+        }
+        message={
+          pendingDelete && pendingDelete.length > 1 ? (
+            <>
+              <strong>{pendingDelete.length}</strong> requests will be marked as removed. This keeps the audit trail but hides them from active queues.
+            </>
+          ) : (
+            <>This marks the request as removed. The audit trail is preserved but it disappears from active queues.</>
+          )
+        }
+        confirmLabel={bulkDeleteMutation.isPending ? "Removing…" : "Remove"}
+        tone="danger"
+        loading={bulkDeleteMutation.isPending}
+        onCancel={() => {
+          if (!bulkDeleteMutation.isPending) setPendingDelete(null);
+        }}
+        onConfirm={() => {
+          if (pendingDelete) void bulkDeleteMutation.mutateAsync(pendingDelete);
+        }}
+      />
     </div>
   );
 }

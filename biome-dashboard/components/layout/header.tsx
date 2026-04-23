@@ -157,15 +157,9 @@ export function Header() {
                     <p className="text-[10px] text-muted font-bold truncate opacity-60 italic">{user?.email || "root@biome.io"}</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="px-2 py-1.5 bg-background rounded-lg border border-border text-center">
-                    <p className="text-[8px] font-black text-muted uppercase tracking-widest mb-0.5">Access</p>
-                    <p className="text-[10px] font-black text-primary uppercase">Full</p>
-                  </div>
-                  <div className="px-2 py-1.5 bg-background rounded-lg border border-border text-center">
-                    <p className="text-[8px] font-black text-muted uppercase tracking-widest mb-0.5">Uptime</p>
-                    <p className="text-[10px] font-black text-emerald-500 uppercase">99.9%</p>
-                  </div>
+                <div className="px-2 py-1.5 bg-background rounded-lg border border-border text-center">
+                  <p className="text-[8px] font-black text-muted uppercase tracking-widest mb-0.5">Access</p>
+                  <p className="text-[10px] font-black text-primary uppercase">Full</p>
                 </div>
               </div>
               <div className="py-2">

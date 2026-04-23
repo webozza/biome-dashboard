@@ -98,7 +98,7 @@ export function SearchFilterBar({
               className="flex items-center gap-2 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted hover:text-red-400 hover:bg-red-400/5 rounded-xl transition-all"
             >
               <X className="w-3 h-3" />
-              Reset System{activeCount > 1 ? ` (${activeCount})` : ""}
+              Clear Filters{activeCount > 1 ? ` (${activeCount})` : ""}
             </button>
           )}
         </div>
@@ -125,7 +125,7 @@ export function SearchFilterBar({
               {selectedCount}
             </div>
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
-              Elements marked for authority
+              {selectedCount === 1 ? "Item selected" : "Items selected"}
             </span>
           </div>
 
@@ -136,7 +136,7 @@ export function SearchFilterBar({
                 className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/10 active:scale-95"
               >
                 <CheckCircle className="w-3.5 h-3.5" />
-                Initialize Approval
+                Approve
               </button>
             )}
             {onBulkReject && (
@@ -145,7 +145,7 @@ export function SearchFilterBar({
                 className="flex items-center gap-2 px-5 py-2.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all active:scale-95"
               >
                 <XCircle className="w-3.5 h-3.5" />
-                Execute Rejection
+                Reject
               </button>
             )}
             {onBulkDelete && (

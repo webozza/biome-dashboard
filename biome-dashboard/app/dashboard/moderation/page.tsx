@@ -101,6 +101,8 @@ export default function ModerationPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Report | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pendingReportDelete, setPendingReportDelete] = useState<string[] | null>(null);
   const pageSize = 10;
 
   const reportsQuery = useQuery({
@@ -146,6 +148,24 @@ export default function ModerationPage() {
       queryClient.invalidateQueries({ queryKey: ["moderation", "reports"] });
       setPendingDelete(null);
       setSelectedId(null);
+    },
+  });
+
+  const deleteReportsMutation = useMutation({
+    mutationFn: async (ids: string[]) =>
+      Promise.all(
+        ids.map((id) =>
+          fetch(`/api/moderation/reports/${id}`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${apiToken}` },
+          }).then((r) => readJson<{ id: string; deleted: true }>(r))
+        )
+      ),
+    onSuccess: (_, ids) => {
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+      setSelectedId((cur) => (cur && ids.includes(cur) ? null : cur));
+      setPendingReportDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["moderation", "reports"] });
     },
   });
 
@@ -227,20 +247,49 @@ export default function ModerationPage() {
       label: "When",
       render: (r: Report) => <span className="text-[11px] text-muted tabular-nums">{timeAgo(r.createdAt)}</span>,
     },
+    {
+      key: "actions",
+      label: "",
+      render: (r: Report) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setPendingReportDelete([r.id]);
+          }}
+          className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#ef4444] hover:bg-[#ef4444]/10 border border-transparent hover:border-[#ef4444]/20 transition-colors"
+          title="Delete report"
+          aria-label="Delete report"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      ),
+    },
   ];
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center gap-3">
-        <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-          <ShieldAlert className="h-7 w-7" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+            <ShieldAlert className="h-7 w-7" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-main">Safety & Moderation</h1>
+            <p className="text-sm font-medium italic text-muted">
+              Review content reports submitted by users and take action on offending posts or reels.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-main">Safety & Moderation</h1>
-          <p className="text-sm font-medium italic text-muted">
-            Review content reports submitted by users and take action on offending posts or reels.
-          </p>
-        </div>
+        {selectedIds.length > 0 && (
+          <button
+            onClick={() => setPendingReportDelete(selectedIds)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-[#ef4444]/15 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete {selectedIds.length}
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -334,6 +383,11 @@ export default function ModerationPage() {
           pageSize={pageSize}
           onPageChange={setCurrentPage}
           getId={(r) => r.id}
+          selectedItems={selectedIds}
+          onToggleItem={(id) =>
+            setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+          }
+          onSelectAll={(ids) => setSelectedIds(ids)}
           onRowClick={(r) => setSelectedId(r.id)}
           emptyMessage={
             tab === "pending"
@@ -481,6 +535,34 @@ export default function ModerationPage() {
         loading={deleteContentMutation.isPending}
         onConfirm={() => pendingDelete && deleteContentMutation.mutate(pendingDelete)}
         onCancel={() => setPendingDelete(null)}
+      />
+
+      <ConfirmModal
+        open={Boolean(pendingReportDelete && pendingReportDelete.length > 0)}
+        title={
+          pendingReportDelete && pendingReportDelete.length > 1
+            ? `Delete ${pendingReportDelete.length} reports?`
+            : "Delete report?"
+        }
+        message={
+          pendingReportDelete && pendingReportDelete.length > 1 ? (
+            <>
+              <strong>{pendingReportDelete.length}</strong> report entries will be permanently deleted. The
+              underlying content is unaffected. This cannot be undone.
+            </>
+          ) : (
+            <>This permanently deletes the selected report entry. The underlying content is unaffected.</>
+          )
+        }
+        confirmLabel={deleteReportsMutation.isPending ? "Deleting…" : "Delete"}
+        tone="danger"
+        loading={deleteReportsMutation.isPending}
+        onCancel={() => {
+          if (!deleteReportsMutation.isPending) setPendingReportDelete(null);
+        }}
+        onConfirm={() => {
+          if (pendingReportDelete) void deleteReportsMutation.mutateAsync(pendingReportDelete);
+        }}
       />
     </div>
   );

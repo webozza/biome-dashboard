@@ -97,6 +97,7 @@ export default function BmidBoxRequestDetailPage() {
     if (!request) return [];
     const base: ActionDef[] = [];
     switch (request.currentStatus) {
+      case "submitted":
       case "pending_admin_review":
         base.push(
           {

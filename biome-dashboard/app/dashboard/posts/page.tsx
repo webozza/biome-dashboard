@@ -54,6 +54,8 @@ export default function PostsPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PostRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const deferredSearch = useDeferredValue(searchQuery.trim());
 
   const listQuery = useQuery({
@@ -87,6 +89,25 @@ export default function PostsPage() {
     onSuccess: (_, post) => {
       setPendingDelete(null);
       setSelectedId((current) => (current === post.id ? null : current));
+      queryClient.invalidateQueries({ queryKey: ["posts", "list"] });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (compositeIds: string[]) =>
+      Promise.all(
+        compositeIds.map((composite) => {
+          const [ownerId, postId] = composite.split(":");
+          return fetch(`/api/users/${ownerId}/posts/${postId}`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${apiToken}` },
+          }).then((r) => readJson<{ id: string; ownerId: string; deleted: true }>(r));
+        })
+      ),
+    onSuccess: () => {
+      setSelectedIds([]);
+      setSelectedId(null);
+      setBulkDeleteOpen(false);
       queryClient.invalidateQueries({ queryKey: ["posts", "list"] });
     },
   });
@@ -181,6 +202,15 @@ export default function PostsPage() {
             </p>
           </div>
         </div>
+        {selectedIds.length > 0 && (
+          <button
+            onClick={() => setBulkDeleteOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-[#ef4444]/15 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete {selectedIds.length}
+          </button>
+        )}
       </div>
 
       <div className="card">
@@ -214,6 +244,11 @@ export default function PostsPage() {
             pageSize={rows.length || itemsPerPage}
             onPageChange={() => {}}
             getId={(r) => `${r.ownerId}:${r.id}`}
+            selectedItems={selectedIds}
+            onToggleItem={(id) =>
+              setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+            }
+            onSelectAll={(ids) => setSelectedIds(ids)}
             onRowClick={(r) => setSelectedId(r.id)}
             emptyMessage="No posts found"
             emptyDescription={
@@ -324,6 +359,23 @@ export default function PostsPage() {
         onConfirm={() => {
           if (pendingDelete) void deleteMutation.mutateAsync(pendingDelete);
         }}
+      />
+
+      <ConfirmModal
+        open={bulkDeleteOpen}
+        title="Delete selected posts?"
+        message={
+          <>
+            <strong className="text-main">{selectedIds.length}</strong> post{selectedIds.length === 1 ? "" : "s"} will be permanently deleted. This cannot be undone.
+          </>
+        }
+        confirmLabel={bulkDeleteMutation.isPending ? "Deleting…" : "Delete"}
+        tone="danger"
+        loading={bulkDeleteMutation.isPending}
+        onCancel={() => {
+          if (!bulkDeleteMutation.isPending) setBulkDeleteOpen(false);
+        }}
+        onConfirm={() => void bulkDeleteMutation.mutateAsync(selectedIds)}
       />
     </div>
   );

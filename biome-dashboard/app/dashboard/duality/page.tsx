@@ -18,6 +18,7 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 import { readJson } from "@/lib/http";
 import { formatDate } from "@/lib/format";
 import { AuthGate } from "@/components/ui/auth-gate";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 
 type DualityDoc = {
   id: string;
@@ -59,6 +60,8 @@ export default function DualityPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adminNote, setAdminNote] = useState("");
   const [pageCursors, setPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const deferredSearch = useDeferredValue(searchQuery);
 
   const statusFilter = activeFilters.status && activeFilters.status !== "all" ? activeFilters.status : undefined;
@@ -126,6 +129,27 @@ export default function DualityPage() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(
+        ids.map(async (id) => {
+          const resp = await fetch(`/api/duality/${id}`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${apiToken}` },
+          });
+          return readJson<{ id: string; deleted: true }>(resp);
+        })
+      );
+      return { count: ids.length };
+    },
+    onSuccess: (_, ids) => {
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+      setSelectedId((cur) => (cur && ids.includes(cur) ? null : cur));
+      setPendingDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["duality", "list"] });
+    },
+  });
+
   const isMutating = patchMutation.isPending || deleteMutation.isPending;
 
   function handlePageChange(nextPage: number) {
@@ -179,11 +203,6 @@ export default function DualityPage() {
 
   const columns = [
     {
-      key: "id",
-      label: "ID",
-      render: (r: DualityDoc) => <span className="font-mono text-[10px] text-muted">{r.id.slice(0, 8)}...</span>,
-    },
-    {
       key: "ownerName",
       label: "Registry Owner",
       render: (r: DualityDoc) => <span className="font-bold text-main">{r.ownerName}</span>,
@@ -220,6 +239,24 @@ export default function DualityPage() {
       label: "Date",
       render: (r: DualityDoc) => <span className="text-muted text-xs font-medium">{formatDate(r.createdAt)}</span>,
     },
+    {
+      key: "actions",
+      label: "",
+      render: (r: DualityDoc) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setPendingDelete([r.id]);
+          }}
+          className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#ef4444] hover:bg-[#ef4444]/10 border border-transparent hover:border-[#ef4444]/20 transition-colors"
+          title="Delete request"
+          aria-label="Delete request"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      ),
+    },
   ];
 
   if (!apiToken) {
@@ -238,6 +275,15 @@ export default function DualityPage() {
             <p className="text-sm text-muted font-medium italic">Monitor joint asset ownership and tagging requests</p>
           </div>
         </div>
+        {selectedIds.length > 0 && (
+          <button
+            onClick={() => setPendingDelete(selectedIds)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-[#ef4444]/15 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete {selectedIds.length}
+          </button>
+        )}
       </div>
 
       <div className="card">
@@ -302,6 +348,11 @@ export default function DualityPage() {
             hasNextPage={Boolean(listQuery.data?.nextCursor)}
             onPageChange={handlePageChange}
             getId={(r) => r.id}
+            selectedItems={selectedIds}
+            onToggleItem={(id) =>
+              setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+            }
+            onSelectAll={(ids) => setSelectedIds(ids)}
             onRowClick={(r) => {
               setSelectedId(r.id);
               setAdminNote(r.adminNote || "");
@@ -457,6 +508,34 @@ export default function DualityPage() {
           </div>
         )}
       </DetailDrawer>
+
+      <ConfirmModal
+        open={Boolean(pendingDelete && pendingDelete.length > 0)}
+        title={
+          pendingDelete && pendingDelete.length > 1
+            ? `Delete ${pendingDelete.length} duality requests?`
+            : "Delete duality request?"
+        }
+        message={
+          pendingDelete && pendingDelete.length > 1 ? (
+            <>
+              This permanently removes <strong>{pendingDelete.length}</strong> selected duality requests.
+              This cannot be undone.
+            </>
+          ) : (
+            <>This permanently removes the selected duality request. This cannot be undone.</>
+          )
+        }
+        confirmLabel="Delete"
+        tone="danger"
+        loading={bulkDeleteMutation.isPending}
+        onConfirm={() => {
+          if (pendingDelete) void bulkDeleteMutation.mutateAsync(pendingDelete);
+        }}
+        onCancel={() => {
+          if (!bulkDeleteMutation.isPending) setPendingDelete(null);
+        }}
+      />
     </div>
   );
 }

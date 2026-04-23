@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ThumbsUp, Minus, ThumbsDown } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { ThumbsUp, Minus, ThumbsDown, Trash2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DataTable } from "@/components/ui/data-table";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import type { ContentDoc, ListResponse } from "./types";
 import { formatDate, readJson } from "./shared";
@@ -24,10 +25,30 @@ function finalResult(r: ContentDoc) {
 
 export function VotingTab() {
   const apiToken = useAuthStore((s) => s.apiToken);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const pageSize = 12;
+
+  const deleteMutation = useMutation({
+    mutationFn: async (ids: string[]) =>
+      Promise.all(
+        ids.map((id) =>
+          fetch(`/api/content/${id}`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${apiToken}` },
+          }).then((r) => readJson<{ id: string; deleted: true }>(r))
+        )
+      ),
+    onSuccess: (_, ids) => {
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+      setPendingDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["content"] });
+    },
+  });
 
   const query = useQuery({
     queryKey: ["content", "voting"],
@@ -136,10 +157,39 @@ export function VotingTab() {
       label: "Result",
       render: (r: ContentDoc) => <span className="text-sm font-bold text-main capitalize">{finalResult(r)}</span>,
     },
+    {
+      key: "actions",
+      label: "",
+      render: (r: ContentDoc) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setPendingDelete([r.id]);
+          }}
+          className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#ef4444] hover:bg-[#ef4444]/10 border border-transparent hover:border-[#ef4444]/20 transition-colors"
+          title="Delete request"
+          aria-label="Delete request"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      ),
+    },
   ];
 
   return (
     <div className="space-y-6">
+      {selectedIds.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setPendingDelete(selectedIds)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-[#ef4444]/15 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete {selectedIds.length}
+          </button>
+        </div>
+      )}
       <div className="grid gap-3 md:grid-cols-5">
         {[
           { label: "Open", value: stats.open },
@@ -201,11 +251,43 @@ export function VotingTab() {
           totalItems={filtered.length}
           onPageChange={setCurrentPage}
           getId={(r) => r.id}
+          selectedItems={selectedIds}
+          onToggleItem={(id) =>
+            setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+          }
+          onSelectAll={(ids) => setSelectedIds(ids)}
           emptyMessage="No voting sessions"
           emptyDescription="Admin approval of a content request opens voting."
           loading={query.isLoading}
         />
       </div>
+
+      <ConfirmModal
+        open={Boolean(pendingDelete && pendingDelete.length > 0)}
+        title={
+          pendingDelete && pendingDelete.length > 1
+            ? `Delete ${pendingDelete.length} requests?`
+            : "Delete request?"
+        }
+        message={
+          pendingDelete && pendingDelete.length > 1 ? (
+            <>
+              <strong>{pendingDelete.length}</strong> content requests will be permanently deleted. This cannot be undone.
+            </>
+          ) : (
+            <>This permanently deletes the selected content request. This cannot be undone.</>
+          )
+        }
+        confirmLabel={deleteMutation.isPending ? "Deleting…" : "Delete"}
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onCancel={() => {
+          if (!deleteMutation.isPending) setPendingDelete(null);
+        }}
+        onConfirm={() => {
+          if (pendingDelete) void deleteMutation.mutateAsync(pendingDelete);
+        }}
+      />
     </div>
   );
 }

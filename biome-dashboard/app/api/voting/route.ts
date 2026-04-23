@@ -25,6 +25,7 @@ function boxRequestToVotingRow(doc: FirebaseFirestore.QueryDocumentSnapshot): Vo
   const data = doc.data() as Record<string, unknown>;
   const votingStatus = data.votingStatus as VotingRow["status"] | null | undefined;
   if (!votingStatus) return null;
+  if (data.currentStatus === "removed") return null;
   const preview = (data.previewData as { title?: string } | undefined) || {};
   const ownerName = (data.ownerSnapshot as { name?: string } | undefined)?.name || "Unknown";
   return {

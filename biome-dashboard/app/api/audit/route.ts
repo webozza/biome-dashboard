@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
 import { guard } from "@/lib/server/guard";
 import { error, json } from "@/lib/server/response";
-import { listCollection } from "@/lib/server/firestore";
+import { createDoc, deleteManyDocs, listCollection, listDocIds } from "@/lib/server/firestore";
 import { getBmidBoxAuditRows } from "@/lib/server/bmid-box";
+
+const DISMISSALS_PATH = "auditDismissals";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +97,28 @@ async function safeList<T>(path: string): Promise<(T & { id: string })[]> {
   }
 }
 
+function firestoreSafeId(id: string): string {
+  return id.replace(/\//g, "_");
+}
+
+function normalizeDecision(s: string): string {
+  const lower = s.toLowerCase().trim();
+  if (!lower) return "";
+  if (lower === "approved" || lower === "approve") return "approved";
+  if (lower === "rejected" || lower === "reject" || lower === "auto-rejected") return "rejected";
+  if (lower === "created" || lower === "submitted") return "submitted";
+  if (lower.includes("declin")) return "declined";
+  if (lower.includes("accept")) return "accepted";
+  if (lower.includes("reject")) return "rejected";
+  if (lower.includes("approve")) return "approved";
+  if (lower.includes("cancel")) return "cancelled";
+  if (lower.includes("remov")) return "removed";
+  if (lower.includes("dismiss")) return "dismissed";
+  if (lower.includes("action")) return "actioned";
+  if (lower.includes("review")) return "reviewed";
+  return lower.replace(/[\s-]+/g, "_");
+}
+
 function toIso(value: unknown): string {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -116,14 +140,17 @@ export async function GET(req: NextRequest) {
   const typeFilter = url.searchParams.get("requestType") || "";
 
   try {
-    const [contents, dualities, verifications, voting, reports, boxRows] = await Promise.all([
+    const [contents, dualities, verifications, voting, reports, boxRows, dismissedIds] = await Promise.all([
       safeList<ContentRequestDoc>("contentRequests"),
       safeList<DualityRequestDoc>("dualityRequests"),
       safeList<VerificationRequestDoc>("verificationRequests"),
       safeList<VotingItemDoc>("votingItems"),
       safeList<ReportDoc>("reports"),
       getBmidBoxAuditRows().catch(() => []),
+      listDocIds(DISMISSALS_PATH).catch(() => [] as string[]),
     ]);
+
+    const dismissedSet = new Set(dismissedIds);
 
     const votesById = new Map<string, VotingItemDoc>();
     for (const v of voting) votesById.set(v.id, v);
@@ -179,13 +206,13 @@ export async function GET(req: NextRequest) {
       const history = (d.decisionHistory || []).concat(d.timeline || []);
       for (let i = 0; i < history.length; i++) {
         const entry = history[i];
-        const decision = entry.decision || entry.action || "";
+        const decision = normalizeDecision(entry.decision || entry.action || "");
         if (!decision) continue;
         rows.push({
           id: `duality-${d.id}-${i}`,
           requestId: d.id,
           requestType: "duality",
-          source: "duality",
+          source: (d.source === "box" ? "box" : d.source === "content" ? "content" : "duality") as AuditRow["source"],
           ownerUser: d.ownerName || "—",
           taggedUser: d.taggedUserName || null,
           status: decision,
@@ -203,7 +230,7 @@ export async function GET(req: NextRequest) {
           id: `duality-${d.id}-final`,
           requestId: d.id,
           requestType: "duality",
-          source: "duality",
+          source: (d.source === "box" ? "box" : d.source === "content" ? "content" : "duality") as AuditRow["source"],
           ownerUser: d.ownerName || "—",
           taggedUser: d.taggedUserName || null,
           status: d.status || "—",
@@ -260,7 +287,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    let filtered = rows;
+    let filtered = rows.filter((r) => !dismissedSet.has(firestoreSafeId(r.id)));
     if (statusFilter) filtered = filtered.filter((r) => r.status === statusFilter);
     if (sourceFilter) filtered = filtered.filter((r) => r.source === sourceFilter);
     if (typeFilter) filtered = filtered.filter((r) => r.requestType === typeFilter);
@@ -270,5 +297,45 @@ export async function GET(req: NextRequest) {
     return json({ items: filtered, total: filtered.length });
   } catch (e) {
     return error("list_failed", 500, { detail: String((e as Error).message) });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const g = guard(req);
+  if (g) return g;
+
+  try {
+    const body = (await req.json().catch(() => null)) as { ids?: unknown } | null;
+    const idsRaw = Array.isArray(body?.ids) ? body!.ids : [];
+    const ids = idsRaw
+      .filter((v): v is string => typeof v === "string" && v.length > 0)
+      .map(firestoreSafeId);
+    if (ids.length === 0) return error("no_ids", 400);
+
+    await Promise.all(ids.map((id) => createDoc(DISMISSALS_PATH, { dismissedAt: new Date().toISOString() }, id)));
+    return json({ dismissed: ids.length });
+  } catch (e) {
+    return error("delete_failed", 500, { detail: String((e as Error).message) });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const g = guard(req);
+  if (g) return g;
+  const url = new URL(req.url);
+  if (url.searchParams.get("action") !== "restore") return error("unknown_action", 400);
+
+  try {
+    const body = (await req.json().catch(() => null)) as { ids?: unknown } | null;
+    const idsRaw = Array.isArray(body?.ids) ? body!.ids : [];
+    const ids = idsRaw
+      .filter((v): v is string => typeof v === "string" && v.length > 0)
+      .map(firestoreSafeId);
+    if (ids.length === 0) return error("no_ids", 400);
+
+    await deleteManyDocs(DISMISSALS_PATH, ids);
+    return json({ restored: ids.length });
+  } catch (e) {
+    return error("restore_failed", 500, { detail: String((e as Error).message) });
   }
 }

@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
         embedEnabled: true,
         contentType: "post",
       },
-      currentStatus: type === "duality" ? "pending_tagged_user" : "submitted",
+      currentStatus: type === "duality" ? "pending_tagged_user" : "pending_admin_review",
       votingStatus: null,
       acceptCount: 0,
       ignoreCount: 0,

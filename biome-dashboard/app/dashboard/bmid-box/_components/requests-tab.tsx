@@ -324,6 +324,7 @@ export function RequestsTab() {
             icon={Box}
             color={card.color}
             trend={{ value: listQuery.isFetching ? "SYNC" : "LIVE", isUp: true }}
+            loading={listQuery.isLoading}
           />
         ))}
       </div>

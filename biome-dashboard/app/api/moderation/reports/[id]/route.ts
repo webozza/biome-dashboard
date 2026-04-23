@@ -48,3 +48,19 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     return error("update_failed", 500, { detail: String((e as Error).message) });
   }
 }
+
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const g = guard(req);
+  if (g) return g;
+
+  const { id } = await ctx.params;
+  if (!id) return error("missing_id", 400);
+
+  try {
+    const firestore = db();
+    await firestore.collection("reports").doc(id).delete();
+    return json({ id, deleted: true });
+  } catch (e) {
+    return error("delete_failed", 500, { detail: String((e as Error).message) });
+  }
+}

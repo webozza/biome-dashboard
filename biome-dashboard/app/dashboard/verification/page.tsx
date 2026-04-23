@@ -127,11 +127,13 @@ async function createVerification(payload: CreatePayload, token: string) {
   return readJson<{ id: string }>(resp);
 }
 
+const PLATFORM_OPTIONS = ["Instagram", "TikTok", "YouTube", "Twitter", "Facebook"] as const;
+
 const EMPTY_CREATE_FORM = {
   userName: "",
   email: "",
   socialAccount: "",
-  platform: "Instagram",
+  platforms: ["Instagram"] as string[],
   profileUrl: "",
   displayName: "",
   accountType: "personal" as AccountType,
@@ -148,6 +150,8 @@ const EMPTY_CREATE_FORM = {
 
 const NEUTRAL_FIELD_CLASS =
   "w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-main outline-none transition-colors focus:border-white/20";
+const BMID_BADGE_CLASS =
+  "inline-flex items-center gap-1.5 rounded-lg border border-[#3b82f6]/20 bg-[#3b82f6]/10 px-2.5 py-1 font-mono text-xs font-black text-[#3b82f6] shadow-none";
 
 function matchesSearch(item: VerificationRequest, query: string) {
   if (!query) return true;
@@ -221,6 +225,7 @@ export default function VerificationPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<VerificationRequest | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [adminNote, setAdminNote] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [pageCursors, setPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
@@ -301,6 +306,16 @@ export default function VerificationPage() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => Promise.all(ids.map((id) => removeVerification(id, apiToken!))),
+    onSuccess: () => {
+      clearSelection();
+      setSelectedId(null);
+      setBulkDeleteOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["verification", "list"] });
+    },
+  });
+
   const createMutation = useMutation({
     mutationFn: (payload: CreatePayload) => createVerification(payload, apiToken!),
     onSuccess: () => {
@@ -340,8 +355,8 @@ export default function VerificationPage() {
       label: "BMID",
       render: (row: VerificationRequest) =>
         row.status === "approved" && row.bmidNumber ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary border border-primary text-white text-xs font-mono font-semibold">
-            <ShieldCheck className="w-3 h-3" />
+          <span className={BMID_BADGE_CLASS}>
+            <ShieldCheck className="w-3.5 h-3.5 text-[#3b82f6]" />
             {row.bmidNumber}
           </span>
         ) : (
@@ -449,7 +464,6 @@ export default function VerificationPage() {
       userName: createForm.userName.trim(),
       email: createForm.email.trim(),
       socialAccount: createForm.socialAccount.trim(),
-      platform: createForm.platform.trim(),
       profileUrl: createForm.profileUrl.trim(),
       displayName: createForm.displayName.trim(),
       verificationReason: createForm.verificationReason.trim(),
@@ -463,7 +477,7 @@ export default function VerificationPage() {
       !trimmed.userName ||
       !trimmed.email ||
       !trimmed.socialAccount ||
-      !trimmed.platform ||
+      createForm.platforms.length === 0 ||
       !trimmed.profileUrl ||
       !trimmed.verificationReason ||
       !createForm.activeOneYear ||
@@ -473,11 +487,10 @@ export default function VerificationPage() {
       return;
     }
     const followerCountNumber = trimmed.followerCount ? Number(trimmed.followerCount) : null;
-    await createMutation.mutateAsync({
+    const basePayload = {
       userName: trimmed.userName,
       email: trimmed.email,
       socialAccount: trimmed.socialAccount,
-      platform: trimmed.platform,
       profileUrl: trimmed.profileUrl,
       displayName: trimmed.displayName || null,
       accountType: createForm.accountType,
@@ -490,7 +503,12 @@ export default function VerificationPage() {
       contentCategory: trimmed.contentCategory || null,
       country: trimmed.country || null,
       contactEmail: trimmed.contactEmail || null,
-    });
+    };
+    await Promise.all(
+      createForm.platforms.map((platform) =>
+        createMutation.mutateAsync({ ...basePayload, platform })
+      )
+    );
   }
 
   function handleSelectUser(userOption: UserPickerOption) {
@@ -562,6 +580,7 @@ export default function VerificationPage() {
           selectedCount={selectedItems.length}
           onBulkApprove={() => void handleBulkAction("approved")}
           onBulkReject={() => void handleBulkAction("rejected")}
+          onBulkDelete={() => setBulkDeleteOpen(true)}
           onExport={() => exportRows(visibleRows)}
         />
 
@@ -640,8 +659,8 @@ export default function VerificationPage() {
               {selected.status === "approved" && selected.bmidNumber && (
                 <div>
                   <p className="text-xs text-tertiary mb-1">BMID Number</p>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary border border-primary text-white text-sm font-mono font-semibold">
-                    <ShieldCheck className="w-3.5 h-3.5" />
+                  <span className={`${BMID_BADGE_CLASS} text-sm`}>
+                    <ShieldCheck className="w-4 h-4 text-[#3b82f6]" />
                     {selected.bmidNumber}
                   </span>
                 </div>
@@ -662,7 +681,7 @@ export default function VerificationPage() {
 
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                <ShieldCheck className="w-4 h-4 text-primary" />
                 <p className="text-xs font-semibold text-secondary uppercase tracking-wider">Submitted Proofs</p>
               </div>
 
@@ -673,7 +692,7 @@ export default function VerificationPage() {
                     href={selected.profileUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-sm text-emerald-700 dark:text-emerald-400 underline-offset-2 hover:underline break-all"
+                    className="text-sm text-primary underline-offset-2 hover:underline break-all"
                   >
                     {selected.profileUrl}
                   </a>
@@ -696,7 +715,7 @@ export default function VerificationPage() {
                 {typeof selected.activeOneYear === "boolean" ? (
                   <div>
                     <p className="text-xs text-tertiary mb-1">Active ≥ 1 year?</p>
-                    <p className={`text-sm font-semibold ${selected.activeOneYear ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
+                    <p className={`text-sm font-semibold ${selected.activeOneYear ? "text-primary" : "text-red-700 dark:text-red-300"}`}>
                       {selected.activeOneYear ? "Yes" : "No"}
                     </p>
                   </div>
@@ -704,7 +723,7 @@ export default function VerificationPage() {
                 {typeof selected.representsRealIdentity === "boolean" ? (
                   <div>
                     <p className="text-xs text-tertiary mb-1">Real person/identity?</p>
-                    <p className={`text-sm font-semibold ${selected.representsRealIdentity ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+                    <p className={`text-sm font-semibold ${selected.representsRealIdentity ? "text-primary" : "text-amber-700 dark:text-amber-300"}`}>
                       {selected.representsRealIdentity ? "Yes" : "No (entertainment/AI)"}
                     </p>
                   </div>
@@ -749,7 +768,7 @@ export default function VerificationPage() {
                     href={selected.screenshotUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-sm text-emerald-700 dark:text-emerald-400 underline-offset-2 hover:underline break-all"
+                    className="text-sm text-primary underline-offset-2 hover:underline break-all"
                   >
                     {selected.screenshotUrl}
                   </a>
@@ -757,7 +776,7 @@ export default function VerificationPage() {
               ) : null}
 
               {selected.agreementAccepted ? (
-                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                <div className="flex items-center gap-2 text-xs font-semibold text-primary">
                   <CheckCircle className="w-3.5 h-3.5" />
                   User confirmed this is their real account.
                 </div>
@@ -814,17 +833,17 @@ export default function VerificationPage() {
                   <button
                     onClick={() => void handleStatusUpdate("approved")}
                     disabled={isMutating}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-500/20 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-500/40 dark:border-emerald-500/20 rounded-xl text-sm font-semibold hover:bg-emerald-500/30 dark:hover:bg-emerald-500/20 transition-colors disabled:opacity-60"
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#059669]/10 text-[#059669] border border-[#059669]/20 rounded-xl text-sm font-bold hover:bg-[#059669]/15 transition-colors disabled:opacity-60"
                   >
-                    {patchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    {patchMutation.isPending && patchMutation.variables?.patch?.status === "approved" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                     Approve
                   </button>
                   <button
                     onClick={() => void handleStatusUpdate("rejected")}
                     disabled={isMutating}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-500/20 text-red-800 dark:bg-red-500/10 dark:text-red-300 border border-red-500/40 dark:border-red-500/20 rounded-xl text-sm font-semibold hover:bg-red-500/30 dark:hover:bg-red-500/20 transition-colors disabled:opacity-60"
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 rounded-xl text-sm font-bold hover:bg-[#ef4444]/15 transition-colors disabled:opacity-60"
                   >
-                    {patchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                    {patchMutation.isPending && patchMutation.variables?.patch?.status === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                     Reject
                   </button>
                 </>
@@ -833,7 +852,7 @@ export default function VerificationPage() {
                 <button
                   onClick={() => void handleStatusUpdate("removed")}
                   disabled={isMutating}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-amber-500/25 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300 border border-amber-500/50 dark:border-amber-500/20 rounded-xl text-sm font-semibold hover:bg-amber-500/35 dark:hover:bg-amber-500/20 transition-colors disabled:opacity-60"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/20 rounded-xl text-sm font-bold hover:bg-[#f59e0b]/15 transition-colors disabled:opacity-60"
                 >
                   {patchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
                   Remove Verification
@@ -844,7 +863,7 @@ export default function VerificationPage() {
             <button
               onClick={() => void deleteMutation.mutateAsync(selected.id)}
               disabled={isMutating}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-500/15 text-red-800 dark:bg-red-500/5 dark:text-red-300 border border-red-500/40 dark:border-red-500/15 rounded-xl text-sm font-semibold hover:bg-red-500/25 dark:hover:bg-red-500/10 transition-colors disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 rounded-xl text-sm font-bold hover:bg-[#ef4444]/15 transition-colors disabled:opacity-60"
             >
               {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
               Delete Request
@@ -878,18 +897,34 @@ export default function VerificationPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="block text-xs text-tertiary">Platform *</label>
-              <select
-                value={createForm.platform}
-                onChange={(e) => setCreateForm((f) => ({ ...f, platform: e.target.value }))}
-                disabled={createMutation.isPending}
-                className={NEUTRAL_FIELD_CLASS}
-              >
-                <option value="Instagram">Instagram</option>
-                <option value="TikTok">TikTok</option>
-                <option value="YouTube">YouTube</option>
-                <option value="Twitter">Twitter</option>
-                <option value="Facebook">Facebook</option>
-              </select>
+              <div className="flex flex-wrap gap-2">
+                {PLATFORM_OPTIONS.map((opt) => {
+                  const active = createForm.platforms.includes(opt);
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      disabled={createMutation.isPending}
+                      onClick={() =>
+                        setCreateForm((f) => ({
+                          ...f,
+                          platforms: active
+                            ? f.platforms.filter((p) => p !== opt)
+                            : [...f.platforms, opt],
+                        }))
+                      }
+                      className={`flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                        active
+                          ? "bg-[#059669]/10 border-[#059669]/20 text-[#059669]"
+                          : "bg-transparent border-white/10 text-tertiary hover:border-white/20"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-tertiary">Select one or more — a separate verification request is created per platform.</p>
             </div>
             <div className="space-y-1.5">
               <label className="block text-xs text-tertiary">Social Account *</label>
@@ -966,9 +1001,9 @@ export default function VerificationPage() {
                     type="button"
                     onClick={() => setCreateForm((f) => ({ ...f, activeOneYear: v }))}
                     disabled={createMutation.isPending}
-                    className={`flex-1 py-1.5 rounded-lg text-xs border transition-colors ${
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
                       createForm.activeOneYear === v
-                        ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                        ? "bg-[#059669]/10 border-[#059669]/20 text-[#059669]"
                         : "bg-transparent border-white/10 text-tertiary hover:border-white/20"
                     }`}
                   >
@@ -986,9 +1021,9 @@ export default function VerificationPage() {
                     type="button"
                     onClick={() => setCreateForm((f) => ({ ...f, representsRealIdentity: v }))}
                     disabled={createMutation.isPending}
-                    className={`flex-1 py-1.5 rounded-lg text-xs border transition-colors ${
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
                       createForm.representsRealIdentity === v
-                        ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                        ? "bg-[#059669]/10 border-[#059669]/20 text-[#059669]"
                         : "bg-transparent border-white/10 text-tertiary hover:border-white/20"
                     }`}
                   >
@@ -1143,6 +1178,23 @@ export default function VerificationPage() {
           setPendingDelete(null);
         }}
         onCancel={() => setPendingDelete(null)}
+      />
+
+      <ConfirmModal
+        open={bulkDeleteOpen}
+        title="Delete selected verifications?"
+        message={
+          <>
+            <strong className="text-main">{selectedItems.length}</strong> verification{selectedItems.length === 1 ? "" : "s"} will be permanently deleted. This cannot be undone.
+          </>
+        }
+        confirmLabel={bulkDeleteMutation.isPending ? "Deleting…" : "Delete"}
+        tone="danger"
+        loading={bulkDeleteMutation.isPending}
+        onCancel={() => {
+          if (!bulkDeleteMutation.isPending) setBulkDeleteOpen(false);
+        }}
+        onConfirm={() => void bulkDeleteMutation.mutateAsync(selectedItems)}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useDeferredValue, useMemo, useState } from "react";
-import { CheckCircle, CheckCircle2, Eye, Loader2, MinusCircle, Vote, XCircle } from "lucide-react";
+import { CheckCircle, CheckCircle2, Eye, Loader2, MinusCircle, Trash2, Vote, XCircle } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { VotingItem } from "@/lib/data/mock-data";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -15,6 +15,7 @@ import { UserPicker, type UserPickerOption } from "@/components/ui/user-picker";
 import { readJson } from "@/lib/http";
 import { formatDate } from "@/lib/format";
 import { AuthGate } from "@/components/ui/auth-gate";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 
 type VotingListResponse = {
   items: VotingItem[];
@@ -98,6 +99,8 @@ export default function VotingPage() {
   const [quickVoteId, setQuickVoteId] = useState<string | null>(null);
   const [quickVoter, setQuickVoter] = useState<UserPickerOption | null>(null);
   const [pageCursors, setPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const statusFilter = activeFilters.status && activeFilters.status !== "all" ? activeFilters.status : undefined;
@@ -162,6 +165,42 @@ export default function VotingPage() {
       queryClient.invalidateQueries({ queryKey: ["voting", "list"] });
       queryClient.invalidateQueries({ queryKey: ["voting", "open-sessions"] });
       queryClient.invalidateQueries({ queryKey: ["content"] });
+      queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const items = listQuery.data?.items || [];
+      const byId = new Map(items.map((item) => [item.id, item]));
+      return Promise.all(
+        ids.map(async (id) => {
+          const item = byId.get(id);
+          if (item?.requestType === "box") {
+            const resp = await fetch(`/api/bmid-box/requests/${id}/remove`, {
+              method: "POST",
+              headers: { authorization: `Bearer ${apiToken}`, "content-type": "application/json" },
+              body: JSON.stringify({
+                actorName: "Admin",
+                removalReason: "Removed from Voting Monitor",
+              }),
+            });
+            return readJson<unknown>(resp);
+          }
+          const resp = await fetch(`/api/voting/${id}`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${apiToken}` },
+          });
+          return readJson<{ id: string; deleted: true }>(resp);
+        })
+      );
+    },
+    onSuccess: (_, ids) => {
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+      setSelectedId((cur) => (cur && ids.includes(cur) ? null : cur));
+      setPendingDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["voting", "list"] });
+      queryClient.invalidateQueries({ queryKey: ["voting", "open-sessions"] });
       queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
     },
   });
@@ -281,6 +320,24 @@ export default function VotingPage() {
         );
       },
     },
+    {
+      key: "actions",
+      label: "",
+      render: (row: VotingItem) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setPendingDelete([row.id]);
+          }}
+          className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#ef4444] hover:bg-[#ef4444]/10 border border-transparent hover:border-[#ef4444]/20 transition-colors"
+          title="Delete session"
+          aria-label="Delete session"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      ),
+    },
   ];
 
   function resetPagination() {
@@ -329,6 +386,15 @@ export default function VotingPage() {
             <p className="text-sm text-muted font-medium italic">Decision making and consensus oversight</p>
           </div>
         </div>
+        {selectedIds.length > 0 && (
+          <button
+            onClick={() => setPendingDelete(selectedIds)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-[#ef4444]/15 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete {selectedIds.length}
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -446,7 +512,7 @@ export default function VotingPage() {
                       : undefined
                   }
                   disabled={recordVoteMutation.isPending || !quickVoter}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-sm font-medium text-amber-300 hover:bg-amber-500/20 disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/20 px-4 py-2.5 text-sm font-bold hover:bg-[#f59e0b]/15 transition-colors disabled:opacity-60"
                 >
                   {recordVoteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <MinusCircle className="w-4 h-4" />}
                   Record Ignore
@@ -529,6 +595,11 @@ export default function VotingPage() {
             hasNextPage={Boolean(listQuery.data?.nextCursor)}
             onPageChange={handlePageChange}
             getId={(row) => row.id}
+            selectedItems={selectedIds}
+            onToggleItem={(id) =>
+              setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+            }
+            onSelectAll={(ids) => setSelectedIds(ids)}
             onRowClick={(row) => setSelectedId(row.id)}
             emptyDescription="Change backend filters or search within the current result page."
             loading={listQuery.isLoading}
@@ -649,7 +720,7 @@ export default function VotingPage() {
                       : undefined
                   }
                   disabled={!selectedVoter || selected.status !== "open" || recordVoteMutation.isPending}
-                  className="py-2.5 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-xl text-sm hover:bg-amber-500/20 transition-colors disabled:opacity-60"
+                  className="py-2.5 bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/20 rounded-xl text-sm font-bold hover:bg-[#f59e0b]/15 transition-colors disabled:opacity-60"
                 >
                   {recordVoteMutation.isPending ? "Recording..." : "Record Ignore"}
                 </button>
@@ -708,6 +779,33 @@ export default function VotingPage() {
           </div>
         )}
       </DetailDrawer>
+
+      <ConfirmModal
+        open={Boolean(pendingDelete && pendingDelete.length > 0)}
+        title={
+          pendingDelete && pendingDelete.length > 1
+            ? `Delete ${pendingDelete.length} voting sessions?`
+            : "Delete voting session?"
+        }
+        message={
+          pendingDelete && pendingDelete.length > 1 ? (
+            <>
+              <strong>{pendingDelete.length}</strong> voting sessions will be permanently deleted, including all recorded votes. This cannot be undone.
+            </>
+          ) : (
+            <>This permanently deletes the selected voting session, including all recorded votes. This cannot be undone.</>
+          )
+        }
+        confirmLabel={deleteMutation.isPending ? "Deleting…" : "Delete"}
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onCancel={() => {
+          if (!deleteMutation.isPending) setPendingDelete(null);
+        }}
+        onConfirm={() => {
+          if (pendingDelete) void deleteMutation.mutateAsync(pendingDelete);
+        }}
+      />
     </div>
   );
 }

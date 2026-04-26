@@ -11,15 +11,18 @@ export async function GET(req: NextRequest) {
 
   try {
     const [createdSnap, taggedSnap] = await Promise.all([
-      db().collection("contentRequests").where("userId", "==", user.uid).orderBy("createdAt", "desc").limit(100).get(),
-      db().collection("contentRequests").where("taggedUserId", "==", user.uid).orderBy("createdAt", "desc").limit(100).get(),
+      db().collection("contentRequests").where("userId", "==", user.uid).get(),
+      db().collection("contentRequests").where("taggedUserId", "==", user.uid).get(),
     ]);
 
     const map = new Map<string, Record<string, unknown>>();
     for (const doc of [...createdSnap.docs, ...taggedSnap.docs]) {
       map.set(doc.id, { id: doc.id, ...(doc.data() as Record<string, unknown>) });
     }
-    return json({ items: Array.from(map.values()) });
+    const items = Array.from(map.values())
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+      .slice(0, 100);
+    return json({ items });
   } catch (e) {
     return error("list_failed", 500, { detail: String((e as Error).message) });
   }

@@ -4,15 +4,12 @@ import { computeVotingOutcome, syncVotingToContent } from "@/lib/server/bmid";
 import type { VotingItemDoc } from "@/lib/server/bmid";
 import { castBmidBoxVote } from "@/lib/server/bmid-box";
 import { getDoc, updateDoc } from "@/lib/server/firestore";
-import { guard } from "@/lib/server/guard";
+import { requireAdmin, requireFirebaseUser } from "@/lib/server/auth";
 import { error, json } from "@/lib/server/response";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const g = guard(req);
-  if (g) return g;
-
   const { id } = await ctx.params;
   let body: Record<string, unknown>;
   try {
@@ -25,10 +22,27 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     body.decision === "accept" || body.decision === "ignore" || body.decision === "refuse"
       ? body.decision
       : null;
-  const actorUserId = typeof body.actorUserId === "string" ? body.actorUserId : "";
-  const actorEmail = typeof body.actorEmail === "string" ? body.actorEmail : null;
   if (!decision) return error("invalid_decision", 400);
-  if (!actorUserId) return error("missing_actor", 400);
+
+  // Dual auth (BM 3.0 spec §6.2) — admin token path lets the dashboard
+  // record votes on behalf of any user (existing dashboard UI). Firebase
+  // ID token path lets verified mobile users vote as themselves; uid &
+  // email come from the verified token (body cannot impersonate).
+  let actorUserId: string;
+  let actorEmail: string | null;
+  const adminCheck = requireAdmin(req);
+  if (adminCheck.ok) {
+    actorUserId = typeof body.actorUserId === "string" ? body.actorUserId : "";
+    actorEmail = typeof body.actorEmail === "string" ? body.actorEmail : null;
+    if (!actorUserId) return error("missing_actor", 400);
+  } else {
+    const userCheck = await requireFirebaseUser(req);
+    if (!userCheck.ok) {
+      return error("unauthorized", 401, { reason: userCheck.reason });
+    }
+    actorUserId = userCheck.uid;
+    actorEmail = userCheck.email;
+  }
 
   const userSnap = await db().collection("users").doc(actorUserId).get();
   if (!userSnap.exists) return error("user_not_found", 404);

@@ -5,6 +5,9 @@ import { applyTaggedUserDecision, ensureVotingSession } from "@/lib/server/bmid"
 import type { ContentRequestDoc, DualityRequestDoc } from "@/lib/server/bmid";
 import { getDoc, updateDoc } from "@/lib/server/firestore";
 import { error, json } from "@/lib/server/response";
+import { sendContentApprovalEmail } from "@/lib/server/email/transport";
+
+type UserEmailDoc = { email?: string | null; name?: string | null; displayName?: string | null };
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +84,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           votingOutcome: null,
         });
         await ensureVotingSession((await getDoc<ContentRequestDoc>("contentRequests", id)) as ContentRequestDoc);
+      }
+
+      const ownerUser = await getDoc<UserEmailDoc>("users", duality.ownerId).catch(() => null);
+      if (ownerUser?.email) {
+        void sendContentApprovalEmail(ownerUser.email, {
+          ownerName: duality.ownerName || ownerUser.name || ownerUser.displayName || "there",
+          postTitle: content?.postTitle ?? null,
+          taggedUserName: duality.taggedUserName ?? null,
+          isDuality: content?.type !== "own",
+        });
       }
 
       const fresh = await getDoc("dualityRequests", id);

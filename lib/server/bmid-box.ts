@@ -20,6 +20,9 @@ import {
   updateDoc,
 } from "@/lib/server/firestore";
 import { buildDualityRequestFromBox } from "@/lib/server/bmid";
+import { sendBoxApprovalEmail, sendBoxFinalizedEmail } from "@/lib/server/email/transport";
+
+type UserEmailDoc = { email?: string | null; name?: string | null; displayName?: string | null };
 
 const REQUESTS_COLLECTION = "bmidBoxRequests";
 const SETTINGS_COLLECTION = "bmidBoxSettings";
@@ -364,6 +367,51 @@ export async function applyBmidBoxAction(
     ...patch,
     history: [...(request.history || []), historyEntry],
   } as Record<string, unknown>);
+
+  // Approve request → opens voting (pending_voting): "approved + voting started" email.
+  // Approve request when already pending_voting → final approved (skips voting): finalize email.
+  // finalize_voting / reject_request also send finalize email.
+  if (input.action === "approve_request" && patch.currentStatus === "pending_voting") {
+    const ownerUser = await getDoc<UserEmailDoc>("users", request.ownerUserId).catch(() => null);
+    if (ownerUser?.email) {
+      void sendBoxApprovalEmail(ownerUser.email, {
+        ownerName: request.ownerSnapshot?.name || ownerUser.name || ownerUser.displayName || "there",
+        previewTitle: request.previewData?.title ?? null,
+        sourcePlatform: request.sourcePlatform ?? null,
+        taggedUserName: request.taggedSnapshot?.name ?? null,
+        isDuality: request.type === "duality",
+      });
+    }
+  }
+
+  const finalizedNow =
+    (input.action === "approve_request" && patch.currentStatus === "approved") ||
+    input.action === "finalize_voting" ||
+    input.action === "reject_request";
+  if (finalizedNow) {
+    const ownerUser = await getDoc<UserEmailDoc>("users", request.ownerUserId).catch(() => null);
+    if (ownerUser?.email) {
+      const finalState = patch.currentStatus || request.currentStatus;
+      const outcome: "approved" | "rejected" | "cancelled" =
+        finalState === "approved"
+          ? "approved"
+          : finalState === "refused" || finalState === "removed"
+            ? "rejected"
+            : "cancelled";
+      void sendBoxFinalizedEmail(ownerUser.email, {
+        ownerName: request.ownerSnapshot?.name || ownerUser.name || ownerUser.displayName || "there",
+        outcome,
+        voteAccept: request.acceptCount,
+        voteIgnore: request.ignoreCount,
+        voteRefuse: request.refuseCount,
+        postTitle: request.previewData?.title ?? null,
+        sourcePlatform: request.sourcePlatform ?? null,
+        taggedUserName: request.taggedSnapshot?.name ?? null,
+        isDuality: request.type === "duality",
+        surface: "box",
+      });
+    }
+  }
 
   return getBmidBoxRequestById(id);
 }

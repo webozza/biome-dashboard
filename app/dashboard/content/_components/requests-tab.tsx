@@ -7,11 +7,9 @@ import {
   XCircle,
   Loader2,
   Plus,
-  ShieldCheck,
   Vote,
   Eye,
   GitBranch,
-  Trash2,
   ThumbsUp,
   Minus,
   ThumbsDown,
@@ -51,8 +49,6 @@ export function RequestsTab() {
     itemsPerPage,
   } = useDashboardStore();
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [adminNote, setAdminNote] = useState("");
   const [pageCursors, setPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
   const [createOpen, setCreateOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -112,11 +108,6 @@ export function RequestsTab() {
     );
   }, [deferredSearch, listQuery.data?.items]);
 
-  const selected = useMemo(
-    () => visibleRows.find((r) => r.id === selectedId) || listQuery.data?.items.find((r) => r.id === selectedId) || null,
-    [visibleRows, selectedId, listQuery.data?.items]
-  );
-
   const allItems = listQuery.data?.items || [];
   const stats = useMemo(() => {
     const totalAccept = allItems.reduce((s, v) => s + (v.voteAccept || 0), 0);
@@ -125,35 +116,6 @@ export function RequestsTab() {
     const pendingCount = allItems.filter((r) => r.status === "pending" || r.status === "in_review").length;
     return { totalAccept, totalIgnore, totalRefuse, pendingCount };
   }, [allItems]);
-
-  const patchMutation = useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: Record<string, unknown> }) => {
-      const resp = await fetch(`/api/content/${id}`, {
-        method: "PATCH",
-        headers: { authorization: `Bearer ${apiToken}`, "content-type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      return readJson<ContentDoc>(resp);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["content", "list"] });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const resp = await fetch(`/api/content/${id}`, {
-        method: "DELETE",
-        headers: { authorization: `Bearer ${apiToken}` },
-      });
-      return readJson<{ id: string; deleted: true }>(resp);
-    },
-    onSuccess: (_, deletedId) => {
-      clearSelection();
-      setSelectedId((cur) => (cur === deletedId ? null : cur));
-      queryClient.invalidateQueries({ queryKey: ["content", "list"] });
-    },
-  });
 
   const createMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
@@ -202,13 +164,10 @@ export function RequestsTab() {
       ),
     onSuccess: () => {
       clearSelection();
-      setSelectedId(null);
       setBulkDeleteOpen(false);
       queryClient.invalidateQueries({ queryKey: ["content", "list"] });
     },
   });
-
-  const isMutating = patchMutation.isPending || deleteMutation.isPending;
 
   function handlePageChange(nextPage: number) {
     if (nextPage < 1 || nextPage === currentPage) return;
@@ -225,7 +184,6 @@ export function RequestsTab() {
   }
 
   function resetPagination() {
-    setSelectedId(null);
     clearSelection();
     setPageCursors({ 1: undefined });
     setPage(1);
@@ -239,24 +197,6 @@ export function RequestsTab() {
   function handleClearFilters() {
     resetPagination();
     clearFilters();
-  }
-
-  async function handleStatusUpdate(id: string, status: string) {
-    const patch: Record<string, unknown> = {
-      status,
-      reviewedBy: user?.name || user?.email || "Admin",
-    };
-    if (adminNote.trim()) {
-      const existing = selected?.adminNotes || [];
-      patch.adminNotes = [
-        ...existing,
-        { note: adminNote.trim(), by: user?.name || "Admin", at: new Date().toISOString().split("T")[0] },
-      ];
-    }
-    if (status === "rejected") {
-      patch.rejectionReason = adminNote.trim() || "Rejected by admin";
-    }
-    await patchMutation.mutateAsync({ id, patch });
   }
 
   async function handleCreateSubmit() {
@@ -484,243 +424,13 @@ export function RequestsTab() {
             onSelectAll={selectAll}
             getId={(r) => r.id}
             onRowClick={(r) => {
-              setSelectedId(r.id);
-              setAdminNote("");
+              window.location.href = `/dashboard/content/${r.id}`;
             }}
             emptyDescription="Change filters or search within the current result page."
             loading={listQuery.isLoading}
           />
         </div>
       </div>
-
-      <DetailDrawer
-        open={Boolean(selectedId)}
-        onClose={() => setSelectedId(null)}
-        title={`Content: ${selected?.postTitle || ""}`}
-        variant="modal"
-      >
-        {!selected ? (
-          <div className="flex items-center justify-center py-16 text-muted">
-            <Loader2 className="w-5 h-5 animate-spin" />
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-y-5 gap-x-4">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Author</p>
-                <p className="font-bold text-main">{selected.userName}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">BMID</p>
-                {selected.bmidNumber ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-mono font-semibold">
-                    <ShieldCheck className="w-3 h-3" />
-                    {selected.bmidNumber}
-                  </span>
-                ) : (
-                  <p className="text-sm text-muted">—</p>
-                )}
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Request Type</p>
-                <span
-                  className={`inline-flex items-center gap-1 uppercase text-xs font-bold px-2.5 py-1 rounded-lg ${
-                    selected.type === "duality"
-                      ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                      : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                  }`}
-                >
-                  {selected.type === "duality" && <GitBranch className="w-3.5 h-3.5" />}
-                  {selected.type === "own" ? "Own Request" : "Duality Request"}
-                </span>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">State</p>
-                <StatusBadge status={selected.status} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Submitted</p>
-                <p className="text-sm font-medium">{formatDate(selected.createdAt)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Reviewed By</p>
-                <p className="text-sm font-medium">{selected.reviewedBy || "Pending review"}</p>
-              </div>
-            </div>
-
-            {selected.type === "duality" && selected.taggedUserName && (
-              <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  <GitBranch className="w-4 h-4 text-purple-400" />
-                  <p className="text-xs font-semibold text-purple-300 uppercase tracking-wider">Duality Pairing</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-[10px] text-muted mb-0.5">Tagged User</p>
-                    <p className="text-sm font-bold text-main">{selected.taggedUserName}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted mb-0.5">Tagged User Action</p>
-                    <StatusBadge status={selected.taggedUserAction || "pending"} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-2">Original Title</p>
-              <p className="font-extrabold text-main text-lg leading-tight">{selected.postTitle}</p>
-            </div>
-
-            {selected.postImageUrl ? (
-              <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selected.postImageUrl} alt={selected.postTitle} className="max-h-80 w-full object-cover" />
-              </div>
-            ) : null}
-
-            <div className="p-4 bg-background border border-border rounded-xl">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-3">Content Extract</p>
-              <p className="text-sm leading-relaxed text-main/80 italic">&ldquo;{selected.postPreview}&rdquo;</p>
-            </div>
-
-            {((selected.voteAccept || 0) + (selected.voteIgnore || 0) + (selected.voteRefuse || 0) > 0 ||
-              selected.votingStatus) && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Vote className="w-4 h-4 text-blue-400" />
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-main">
-                    Community Vote
-                    {selected.votingStatus && (
-                      <StatusBadge status={selected.votingStatus} size="xs" />
-                    )}
-                  </h3>
-                </div>
-                <div className="space-y-3">
-                  {[
-                    { label: "Accept", value: selected.voteAccept || 0, color: "var(--primary)", icon: ThumbsUp },
-                    { label: "Ignore", value: selected.voteIgnore || 0, color: "#f59e0b", icon: Minus },
-                    { label: "Refuse", value: selected.voteRefuse || 0, color: "#ef4444", icon: ThumbsDown },
-                  ].map((v) => {
-                    const total = (selected.voteAccept || 0) + (selected.voteIgnore || 0) + (selected.voteRefuse || 0);
-                    const pct = total > 0 ? Math.round((v.value / total) * 100) : 0;
-                    const Icon = v.icon;
-                    return (
-                      <div key={v.label}>
-                        <div className="flex justify-between items-end mb-1.5">
-                          <span className="text-xs font-bold text-main uppercase tracking-wide flex items-center gap-1.5">
-                            <Icon className="w-3.5 h-3.5" style={{ color: v.color }} />
-                            {v.label}
-                          </span>
-                          <span className="text-xs font-extrabold text-main">
-                            {v.value}{" "}
-                            <span className="text-[10px] text-muted font-bold">({pct}%)</span>
-                          </span>
-                        </div>
-                        <div className="h-2 bg-surface-hover rounded-full overflow-hidden border border-border/50">
-                          <div
-                            className="h-full rounded-full transition-all duration-1000 ease-out"
-                            style={{ width: `${pct}%`, backgroundColor: v.color }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {selected.votingOutcome && (
-                  <div className="flex items-center gap-2 pt-2">
-                    <p className="text-[10px] font-bold text-muted uppercase tracking-widest">Outcome:</p>
-                    <StatusBadge status={selected.votingOutcome} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {selected.adminNotes && selected.adminNotes.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-main border-b border-border pb-2">
-                  Admin Audit Trail
-                </h3>
-                {selected.adminNotes.map((note, i) => (
-                  <div key={i} className="p-3 bg-background border border-border rounded-xl">
-                    <p className="text-sm leading-relaxed text-main">{note.note}</p>
-                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50">
-                      <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
-                        {note.by.charAt(0).toUpperCase()}
-                      </div>
-                      <p className="text-[10px] text-muted font-bold uppercase tracking-wide">
-                        {note.by} <span className="mx-1 opacity-30">&bull;</span> {note.at}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <label className="block text-xs text-tertiary">Admin Note</label>
-              <textarea
-                value={adminNote}
-                onChange={(e) => setAdminNote(e.target.value)}
-                rows={3}
-                disabled={isMutating}
-                className={NEUTRAL_FIELD_CLASS}
-                placeholder="Add reviewer context for this request"
-              />
-            </div>
-
-            {(patchMutation.isError || deleteMutation.isError) && (
-              <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300">
-                {patchMutation.error?.message || deleteMutation.error?.message}
-              </div>
-            )}
-
-            <div className="flex flex-col md:flex-row gap-2">
-              {(selected.status === "pending" || selected.status === "in_review") && (
-                <>
-                  <button
-                    onClick={() => void handleStatusUpdate(selected.id, "approved")}
-                    disabled={isMutating}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-accent/10 text-accent border border-accent/20 rounded-xl text-sm hover:bg-accent/20 transition-colors disabled:opacity-60"
-                  >
-                    {patchMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <CheckCircle className="w-4 h-4" />
-                    )}
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => void handleStatusUpdate(selected.id, "rejected")}
-                    disabled={isMutating}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-sm hover:bg-red-500/20 transition-colors disabled:opacity-60"
-                  >
-                    {patchMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <XCircle className="w-4 h-4" />
-                    )}
-                    Reject
-                  </button>
-                </>
-              )}
-            </div>
-
-            <button
-              onClick={() => void deleteMutation.mutateAsync(selected.id)}
-              disabled={isMutating}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-500/5 text-red-300 border border-red-500/15 rounded-xl text-sm hover:bg-red-500/10 transition-colors disabled:opacity-60"
-            >
-              {deleteMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Trash2 className="w-4 h-4" />
-              )}
-              Delete Request
-            </button>
-          </div>
-        )}
-      </DetailDrawer>
 
       <DetailDrawer
         open={createOpen}

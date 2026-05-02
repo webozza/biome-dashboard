@@ -4,7 +4,10 @@ import { guard } from "@/lib/server/guard";
 import { getDoc, updateDoc } from "@/lib/server/firestore";
 import type { ContentRequestDoc, DualityRequestDoc } from "@/lib/server/bmid";
 import { ensureVotingSession } from "@/lib/server/bmid";
+import { sendContentApprovalEmail } from "@/lib/server/email/transport";
 import { error, json } from "@/lib/server/response";
+
+type UserEmailDoc = { email?: string | null; name?: string | null; displayName?: string | null };
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +70,22 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       const fresh = (await getDoc<ContentRequestDoc>("contentRequests", id)) as ContentRequestDoc;
       await ensureVotingSession(fresh);
       const synced = await getDoc<ContentRequestDoc>("contentRequests", id);
+
+      // Email owner that admin approved + voting opened.
+      // Duality flows go through /api/duality/[id] which sends its own email,
+      // so we only fire from here for "own" type to avoid double-sending.
+      if (existing.type === "own") {
+        const ownerUser = await getDoc<UserEmailDoc>("users", existing.userId).catch(() => null);
+        if (ownerUser?.email) {
+          void sendContentApprovalEmail(ownerUser.email, {
+            ownerName: existing.userName || ownerUser.name || ownerUser.displayName || "there",
+            postTitle: existing.postTitle ?? null,
+            taggedUserName: null,
+            isDuality: false,
+          });
+        }
+      }
+
       return json(synced);
     } catch (e) {
       return error("update_failed", 500, { detail: String((e as Error).message) });

@@ -14,16 +14,16 @@ type VerificationContext = {
 };
 
 const COLORS = {
-  bg: "#050505",
-  card: "#0f0f10",
-  border: "rgba(255,255,255,0.08)",
-  text: "#ffffff",
-  textMuted: "#9ca3af",
-  textDim: "#6b7280",
+  bg: "#ffffff",
+  card: "#ffffff",
+  border: "rgba(15,23,42,0.08)",
+  text: "#0f172a",
+  textMuted: "#475569",
+  textDim: "#94a3b8",
   accent: "#10b981",
-  accentSoft: "rgba(16,185,129,0.12)",
-  danger: "#f87171",
-  dangerSoft: "rgba(248,113,113,0.10)",
+  accentSoft: "rgba(16,185,129,0.10)",
+  danger: "#ef4444",
+  dangerSoft: "rgba(239,68,68,0.08)",
 };
 
 function escapeHtml(value: string): string {
@@ -94,7 +94,7 @@ function ctaButton(label: string, href: string, accent: string): string {
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
       <tr>
         <td align="center" style="border-radius:12px;background:${accent};">
-          <a href="${escapeHtml(href)}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#050505;text-decoration:none;letter-spacing:0.01em;border-radius:12px;">
+          <a href="${escapeHtml(href)}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:0.01em;border-radius:12px;">
             ${escapeHtml(label)}
           </a>
         </td>
@@ -123,8 +123,8 @@ function baseShell(opts: {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<meta name="color-scheme" content="dark light" />
-<meta name="supported-color-schemes" content="dark light" />
+<meta name="color-scheme" content="light" />
+<meta name="supported-color-schemes" content="light" />
 <title>${escapeHtml(opts.headline)}</title>
 <style>
   @media only screen and (max-width:520px) {
@@ -286,4 +286,351 @@ export function renderRejectedEmail(brand: BrandConfig, ctx: VerificationContext
   return { subject, html, text };
 }
 
-export type { BrandConfig, VerificationContext };
+type ContentApprovalContext = {
+  ownerName: string;
+  postTitle?: string | null;
+  taggedUserName?: string | null;
+  isDuality: boolean;
+};
+
+type BoxApprovalContext = {
+  ownerName: string;
+  previewTitle?: string | null;
+  sourcePlatform?: string | null;
+  taggedUserName?: string | null;
+  isDuality: boolean;
+};
+
+export function renderContentApprovedEmail(brand: BrandConfig, ctx: ContentApprovalContext) {
+  const subject = "✅ Your BMID content is approved — voting has started";
+  const firstName = ctx.ownerName.split(" ")[0] || "there";
+  const detailsRows = [
+    { label: "Request type", value: ctx.isDuality ? "Duality content" : "BMID content" },
+    { label: "Title", value: ctx.postTitle || "Not provided" },
+  ];
+  if (ctx.isDuality && ctx.taggedUserName) {
+    detailsRows.push({ label: "Tagged with", value: ctx.taggedUserName });
+  }
+  detailsRows.push({ label: "Status", value: "Admin approved — voting open" });
+
+  const html = baseShell({
+    brand,
+    previewText: "Your BMID content has been admin-approved and community voting is now open.",
+    accentColor: COLORS.accent,
+    accentSoft: COLORS.accentSoft,
+    statusLabel: "Approved",
+    headline: `Content approved, ${firstName}`,
+    intro:
+      "Your BMID content has been approved by an admin and community voting is now open. Once voting concludes, you'll receive a separate email with the final result.",
+    detailsRows,
+    ctaLabel: "Open Biome Aura",
+    ctaHref: brand.appUrl,
+    footerNote: "You're receiving this because you submitted a BMID content request.",
+  });
+
+  const text = [
+    `Content approved, ${ctx.ownerName}`,
+    ``,
+    "Your BMID content has been approved by an admin and community voting is now open.",
+    "You'll receive a separate email once voting concludes.",
+    ``,
+    `Request type: ${ctx.isDuality ? "Duality content" : "BMID content"}`,
+    `Title: ${ctx.postTitle || "Not provided"}`,
+    ctx.isDuality && ctx.taggedUserName ? `Tagged with: ${ctx.taggedUserName}` : "",
+    `Status: Admin approved — voting open`,
+    ``,
+    `Open the app: ${brand.appUrl}`,
+    `Questions? ${brand.supportEmail}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return { subject, html, text };
+}
+
+export function renderBoxApprovedEmail(brand: BrandConfig, ctx: BoxApprovalContext) {
+  const subject = "✅ Your BMID Box content is approved — voting has started";
+  const firstName = ctx.ownerName.split(" ")[0] || "there";
+  const detailsRows = [
+    { label: "Request type", value: ctx.isDuality ? "BMID Box (duality)" : "BMID Box" },
+    { label: "Title", value: ctx.previewTitle || "Not provided" },
+  ];
+  if (ctx.sourcePlatform) {
+    detailsRows.push({ label: "Platform", value: ctx.sourcePlatform });
+  }
+  if (ctx.isDuality && ctx.taggedUserName) {
+    detailsRows.push({ label: "Tagged with", value: ctx.taggedUserName });
+  }
+  detailsRows.push({ label: "Status", value: "Admin approved — voting open" });
+
+  const html = baseShell({
+    brand,
+    previewText: "Your BMID Box content has been admin-approved and community voting is now open.",
+    accentColor: COLORS.accent,
+    accentSoft: COLORS.accentSoft,
+    statusLabel: "Approved",
+    headline: `Box content approved, ${firstName}`,
+    intro:
+      "Your BMID Box content has been approved by an admin and community voting is now open. Once voting concludes, you'll receive a separate email with the final result.",
+    detailsRows,
+    ctaLabel: "Open Biome Aura",
+    ctaHref: brand.appUrl,
+    footerNote: "You're receiving this because you submitted a BMID Box request.",
+  });
+
+  const text = [
+    `Box content approved, ${ctx.ownerName}`,
+    ``,
+    "Your BMID Box content has been approved by an admin and community voting is now open.",
+    "You'll receive a separate email once voting concludes.",
+    ``,
+    `Request type: ${ctx.isDuality ? "BMID Box (duality)" : "BMID Box"}`,
+    `Title: ${ctx.previewTitle || "Not provided"}`,
+    ctx.sourcePlatform ? `Platform: ${ctx.sourcePlatform}` : "",
+    ctx.isDuality && ctx.taggedUserName ? `Tagged with: ${ctx.taggedUserName}` : "",
+    `Status: Admin approved — voting open`,
+    ``,
+    `Open the app: ${brand.appUrl}`,
+    `Questions? ${brand.supportEmail}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return { subject, html, text };
+}
+
+type FinalizationContext = {
+  ownerName: string;
+  outcome: "approved" | "rejected" | "cancelled";
+  voteAccept?: number;
+  voteIgnore?: number;
+  voteRefuse?: number;
+  postTitle?: string | null;
+  taggedUserName?: string | null;
+  isDuality?: boolean;
+  surface: "content" | "box";
+  sourcePlatform?: string | null;
+};
+
+function outcomeCopy(outcome: FinalizationContext["outcome"]) {
+  switch (outcome) {
+    case "approved":
+      return {
+        statusLabel: "Final: Approved",
+        headlinePrefix: "Approved by community vote",
+        intro:
+          "Community voting has concluded and your submission has been approved. It's now visible on Biome Aura.",
+        accent: COLORS.accent,
+        accentSoft: COLORS.accentSoft,
+        subjectPrefix: "✅",
+      };
+    case "rejected":
+      return {
+        statusLabel: "Final: Not approved",
+        headlinePrefix: "Voting closed — not approved",
+        intro:
+          "Community voting has concluded and your submission was not approved.",
+        accent: COLORS.danger,
+        accentSoft: COLORS.dangerSoft,
+        subjectPrefix: "Update on",
+      };
+    case "cancelled":
+      return {
+        statusLabel: "Final: Cancelled",
+        headlinePrefix: "Voting concluded — no final decision",
+        intro:
+          "Community voting has concluded without a clear outcome and your submission has been cancelled.",
+        accent: COLORS.textMuted,
+        accentSoft: "rgba(71,85,105,0.10)",
+        subjectPrefix: "Update on",
+      };
+  }
+}
+
+export function renderContentFinalizedEmail(brand: BrandConfig, ctx: FinalizationContext) {
+  const copy = outcomeCopy(ctx.outcome);
+  const firstName = ctx.ownerName.split(" ")[0] || "there";
+  const subject = `${copy.subjectPrefix} your BMID content — voting finalized`;
+  const detailsRows = [
+    { label: "Request type", value: ctx.isDuality ? "Duality content" : "BMID content" },
+    { label: "Title", value: ctx.postTitle || "Not provided" },
+  ];
+  if (ctx.isDuality && ctx.taggedUserName) {
+    detailsRows.push({ label: "Tagged with", value: ctx.taggedUserName });
+  }
+  detailsRows.push({ label: "Outcome", value: copy.statusLabel.replace(/^Final: /, "") });
+  if (
+    typeof ctx.voteAccept === "number" ||
+    typeof ctx.voteIgnore === "number" ||
+    typeof ctx.voteRefuse === "number"
+  ) {
+    detailsRows.push({
+      label: "Final votes",
+      value: `Accept ${ctx.voteAccept ?? 0} · Ignore ${ctx.voteIgnore ?? 0} · Refuse ${ctx.voteRefuse ?? 0}`,
+    });
+  }
+
+  const html = baseShell({
+    brand,
+    previewText: copy.intro,
+    accentColor: copy.accent,
+    accentSoft: copy.accentSoft,
+    statusLabel: copy.statusLabel,
+    headline: `${copy.headlinePrefix}, ${firstName}`,
+    intro: copy.intro,
+    detailsRows,
+    ctaLabel: "Open Biome Aura",
+    ctaHref: brand.appUrl,
+    footerNote: "You're receiving this because you submitted a BMID content request.",
+  });
+
+  const text = [
+    `${copy.headlinePrefix}, ${ctx.ownerName}`,
+    ``,
+    copy.intro,
+    ``,
+    `Request type: ${ctx.isDuality ? "Duality content" : "BMID content"}`,
+    `Title: ${ctx.postTitle || "Not provided"}`,
+    ctx.isDuality && ctx.taggedUserName ? `Tagged with: ${ctx.taggedUserName}` : "",
+    `Outcome: ${copy.statusLabel.replace(/^Final: /, "")}`,
+    `Final votes: Accept ${ctx.voteAccept ?? 0} · Ignore ${ctx.voteIgnore ?? 0} · Refuse ${ctx.voteRefuse ?? 0}`,
+    ``,
+    `Open the app: ${brand.appUrl}`,
+    `Questions? ${brand.supportEmail}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return { subject, html, text };
+}
+
+export function renderBoxFinalizedEmail(brand: BrandConfig, ctx: FinalizationContext) {
+  const copy = outcomeCopy(ctx.outcome);
+  const firstName = ctx.ownerName.split(" ")[0] || "there";
+  const subject = `${copy.subjectPrefix} your BMID Box content — voting finalized`;
+  const detailsRows = [
+    { label: "Request type", value: ctx.isDuality ? "BMID Box (duality)" : "BMID Box" },
+    { label: "Title", value: ctx.postTitle || "Not provided" },
+  ];
+  if (ctx.sourcePlatform) {
+    detailsRows.push({ label: "Platform", value: ctx.sourcePlatform });
+  }
+  if (ctx.isDuality && ctx.taggedUserName) {
+    detailsRows.push({ label: "Tagged with", value: ctx.taggedUserName });
+  }
+  detailsRows.push({ label: "Outcome", value: copy.statusLabel.replace(/^Final: /, "") });
+  if (
+    typeof ctx.voteAccept === "number" ||
+    typeof ctx.voteIgnore === "number" ||
+    typeof ctx.voteRefuse === "number"
+  ) {
+    detailsRows.push({
+      label: "Final votes",
+      value: `Accept ${ctx.voteAccept ?? 0} · Ignore ${ctx.voteIgnore ?? 0} · Refuse ${ctx.voteRefuse ?? 0}`,
+    });
+  }
+
+  const html = baseShell({
+    brand,
+    previewText: copy.intro,
+    accentColor: copy.accent,
+    accentSoft: copy.accentSoft,
+    statusLabel: copy.statusLabel,
+    headline: `${copy.headlinePrefix}, ${firstName}`,
+    intro: copy.intro,
+    detailsRows,
+    ctaLabel: "Open Biome Aura",
+    ctaHref: brand.appUrl,
+    footerNote: "You're receiving this because you submitted a BMID Box request.",
+  });
+
+  const text = [
+    `${copy.headlinePrefix}, ${ctx.ownerName}`,
+    ``,
+    copy.intro,
+    ``,
+    `Request type: ${ctx.isDuality ? "BMID Box (duality)" : "BMID Box"}`,
+    `Title: ${ctx.postTitle || "Not provided"}`,
+    ctx.sourcePlatform ? `Platform: ${ctx.sourcePlatform}` : "",
+    ctx.isDuality && ctx.taggedUserName ? `Tagged with: ${ctx.taggedUserName}` : "",
+    `Outcome: ${copy.statusLabel.replace(/^Final: /, "")}`,
+    `Final votes: Accept ${ctx.voteAccept ?? 0} · Ignore ${ctx.voteIgnore ?? 0} · Refuse ${ctx.voteRefuse ?? 0}`,
+    ``,
+    `Open the app: ${brand.appUrl}`,
+    `Questions? ${brand.supportEmail}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return { subject, html, text };
+}
+
+type PasswordResetOtpContext = {
+  otp: string;
+  expiresInMinutes: number;
+};
+
+export function renderPasswordResetOtpEmail(brand: BrandConfig, ctx: PasswordResetOtpContext) {
+  const subject = `Your password reset code: ${ctx.otp}`;
+  const otpDisplay = ctx.otp.split("").join(" ");
+
+  const otpBlock = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+      <tr>
+        <td align="center" style="background:${COLORS.accentSoft};border:1px solid ${COLORS.accent}33;border-radius:18px;padding:24px 16px;">
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:${COLORS.accent};padding-bottom:12px;">Your verification code</div>
+          <div style="font-family:'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace;font-size:36px;font-weight:800;letter-spacing:0.32em;color:${COLORS.text};">
+            ${escapeHtml(otpDisplay)}
+          </div>
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;color:${COLORS.textMuted};padding-top:14px;">
+            Expires in ${ctx.expiresInMinutes} minutes
+          </div>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  const html = baseShell({
+    brand,
+    previewText: `Your password reset code is ${ctx.otp}. It expires in ${ctx.expiresInMinutes} minutes.`,
+    accentColor: COLORS.accent,
+    accentSoft: COLORS.accentSoft,
+    statusLabel: "Password reset",
+    headline: "Reset your password",
+    intro:
+      "We received a request to reset your password. Enter the code below in the app to continue. If you didn't request this, you can safely ignore this email.",
+    detailsRows: [
+      { label: "Request type", value: "Password reset" },
+      { label: "Code expiry", value: `${ctx.expiresInMinutes} minutes` },
+    ],
+    extraBlockHtml: otpBlock,
+    ctaLabel: "Open Biome Aura",
+    ctaHref: brand.appUrl,
+    footerNote: "Never share this code with anyone. Our team will never ask for it.",
+  });
+
+  const text = [
+    `Reset your password`,
+    ``,
+    `We received a request to reset your password.`,
+    ``,
+    `Your code: ${ctx.otp}`,
+    `Expires in: ${ctx.expiresInMinutes} minutes`,
+    ``,
+    `If you didn't request this, ignore this email.`,
+    `Never share this code with anyone.`,
+    ``,
+    `Questions? ${brand.supportEmail}`,
+  ].join("\n");
+
+  return { subject, html, text };
+}
+
+export type {
+  BrandConfig,
+  VerificationContext,
+  ContentApprovalContext,
+  BoxApprovalContext,
+  FinalizationContext,
+  PasswordResetOtpContext,
+};

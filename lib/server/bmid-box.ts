@@ -21,6 +21,12 @@ import {
 } from "@/lib/server/firestore";
 import { buildDualityRequestFromBox } from "@/lib/server/bmid";
 import { sendBoxApprovalEmail, sendBoxFinalizedEmail } from "@/lib/server/email/transport";
+import {
+  buildApprovalNotificationCopy,
+  buildNotificationRequestDocPath,
+  notifyUser,
+  broadcastPostNotification,
+} from "@/lib/server/notifications";
 
 type UserEmailDoc = { email?: string | null; name?: string | null; displayName?: string | null };
 
@@ -31,7 +37,7 @@ const DUALITY_COLLECTION = "dualityRequests";
 
 export type BmidBoxRequestDoc = BmidBoxRequest & { id: string };
 
-function nowIso() {
+function nowIso(): string {
   return new Date().toISOString();
 }
 
@@ -298,6 +304,7 @@ export async function applyBmidBoxAction(
   const actionNow = nowIso();
   let actionType: BmidBoxHistoryEntry["actionType"] = "status_changed";
   let note = input.note?.trim() || input.action.replaceAll("_", " ");
+  const openedVotingNow = input.action === "approve_request" && request.currentStatus !== "pending_voting";
 
   switch (input.action) {
     case "approve_request":
@@ -314,7 +321,7 @@ export async function applyBmidBoxAction(
     case "reject_request":
       patch.currentStatus = "refused";
       patch.votingStatus = request.votingStatus ? "finalized" : request.votingStatus;
-      patch.rejectionReason = input.rejectionReason || "Rejected by admin";
+      patch.rejectionReason = input.rejectionReason || "Rejected by admin review";
       patch.finalizedAt = actionNow;
       actionType = "finalized";
       break;
@@ -367,6 +374,44 @@ export async function applyBmidBoxAction(
     ...patch,
     history: [...(request.history || []), historyEntry],
   } as Record<string, unknown>);
+
+  // Notifications
+  if (openedVotingNow) {
+    const actorName = request.ownerSnapshot?.name || "User";
+    const requestDocPath = buildNotificationRequestDocPath("box", id);
+    const { title, body } = buildApprovalNotificationCopy({
+      actorName,
+      source: "box",
+      requestType: request.type === "duality" ? "duality" : "own",
+      postTitle: request.previewData?.title ?? null,
+    });
+
+    void broadcastPostNotification(request.ownerUserId, actorName, {
+      type: "bmid_box_approved",
+      title,
+      body,
+      bmidRequestId: id,
+      bmidSource: "box",
+      bmidDecision: "accepted",
+      authorId: request.ownerUserId,
+      docPath: requestDocPath,
+      requestDocPath,
+    });
+  } else if (input.action === "reject_request") {
+    // Only notify the owner on rejection
+    const requestDocPath = buildNotificationRequestDocPath("box", id);
+    void notifyUser(request.ownerUserId, {
+      type: "bmid_box_rejected",
+      title: "BMID Box Update",
+      body: `Your BMID Box request "${request.previewData?.title || "Untitled post"}" was not approved. Reason: ${input.rejectionReason || "Rejected by admin review"}`,
+      bmidRequestId: id,
+      bmidSource: "box",
+      bmidDecision: "rejected",
+      authorId: request.ownerUserId,
+      docPath: requestDocPath,
+      requestDocPath,
+    });
+  }
 
   // Approve request → opens voting (pending_voting): "approved + voting started" email.
   // Approve request when already pending_voting → final approved (skips voting): finalize email.
@@ -451,7 +496,7 @@ export async function castBmidBoxVote(
   if (!request) return { ok: false, reason: "not_found" };
   if (request.votingStatus !== "open") return { ok: false, reason: "voting_not_open" };
 
-  const votes: BmidBoxVote[] = (request as unknown as { votes?: BmidBoxVote[] }).votes || [];
+  const votes = request.votes || [];
   if (votes.some((vote) => vote.voterUserId === input.voterUserId)) {
     return { ok: false, reason: "already_voted" };
   }

@@ -27,6 +27,7 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 import { readJson } from "@/lib/http";
 import { formatDate } from "@/lib/format";
 import { AuthGate } from "@/components/ui/auth-gate";
+import { triggerAdminNotification } from "@/lib/notifications-client";
 
 type VerificationListResponse = {
   

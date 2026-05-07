@@ -4,6 +4,7 @@ import { guard } from "@/lib/server/guard";
 import { deleteDoc, getDoc, updateDoc } from "@/lib/server/firestore";
 import { error, json } from "@/lib/server/response";
 import { sendVerificationEmail } from "@/lib/server/email/transport";
+import { notifyUser } from "@/lib/server/notifications";
 import { db } from "@/lib/server/firebase";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ type VerificationDoc = {
   userId?: string;
   userName?: string;
   email?: string;
+  contactEmail?: string | null;
   socialAccount?: string;
   platform?: string;
   status?: string;
@@ -77,6 +79,17 @@ async function ensureApprovedUserState(userId: string): Promise<string | null> {
   });
 }
 
+async function revokeApprovedUserState(userId: string) {
+  await db().collection("users").doc(userId).set(
+    {
+      verified: false,
+      bmidNumber: null,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+}
+
 export const GET = buildGetOne("verificationRequests");
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -94,14 +107,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
 
   try {
     if (existing.status === "approved" && existing.userId) {
-      await db().collection("users").doc(existing.userId).set(
-        {
-          verified: false,
-          bmidNumber: null,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+      await revokeApprovedUserState(existing.userId);
     }
     await deleteDoc("verificationRequests", id);
     return json({ id, deleted: true, revokedUserId: existing.status === "approved" ? existing.userId || null : null });
@@ -141,6 +147,19 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   const prevStatus = existing.status || null;
   const nextStatus = fresh.status || null;
+
+  // Revoke status if transitioning AWAY from approved
+  if (prevStatus === "approved" && nextStatus !== "approved" && fresh.userId) {
+    try {
+      await revokeApprovedUserState(fresh.userId);
+      // Also clear bmidNumber on the request itself since it's no longer valid
+      await updateDoc("verificationRequests", id, { bmidNumber: null });
+      fresh = { ...fresh, bmidNumber: null };
+    } catch (e) {
+      return error("user_revoke_failed", 500, { detail: String((e as Error).message) });
+    }
+  }
+
   const transitionedTo =
     nextStatus && prevStatus !== nextStatus && (nextStatus === "approved" || nextStatus === "rejected")
       ? (nextStatus as "approved" | "rejected")
@@ -159,14 +178,30 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
   }
 
-  if (transitionedTo && fresh.email) {
-    void sendVerificationEmail(fresh.email, transitionedTo, {
-      userName: fresh.userName || "there",
-      platform: fresh.platform || "your platform",
-      socialAccount: fresh.socialAccount || "",
-      adminNote: fresh.adminNote ?? null,
-      rejectionReason: fresh.rejectionReason ?? null,
+  // Notifications & Emails
+  if (transitionedTo && fresh.userId) {
+    const isApproved = transitionedTo === "approved";
+    void notifyUser(fresh.userId, {
+      type: isApproved ? "bmid_verification_approved" : "bmid_verification_rejected",
+      title: isApproved ? "Verification Approved!" : "Verification Update",
+      body: isApproved 
+        ? "Your account verification request was approved. Your BMID is now active."
+        : `Your verification request was not approved. Reason: ${fresh.rejectionReason || "Rejected by admin review"}`,
+      bmidRequestId: id,
+      bmidSource: "verification",
+      bmidDecision: isApproved ? "accepted" : "rejected",
     });
+
+    const targetEmail = (fresh.contactEmail || fresh.email || "").trim();
+    if (targetEmail) {
+      await sendVerificationEmail(targetEmail, transitionedTo, {
+        userName: fresh.userName || "there",
+        platform: fresh.platform || "your platform",
+        socialAccount: fresh.socialAccount || "",
+        adminNote: fresh.adminNote ?? null,
+        rejectionReason: fresh.rejectionReason ?? null,
+      });
+    }
   }
 
   return json(fresh);

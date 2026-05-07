@@ -153,6 +153,7 @@ export default function ContentRequestDetailPage() {
     if (status === "rejected") {
       patch.rejectionReason = adminNote.trim() || "Rejected by admin";
     }
+    
     await patchMutation.mutateAsync(patch);
     setAdminNote("");
   }
@@ -167,7 +168,8 @@ export default function ContentRequestDetailPage() {
 
   const totalVotes =
     (selected.voteAccept || 0) + (selected.voteIgnore || 0) + (selected.voteRefuse || 0);
-  const canDecide = selected.status === "pending" || selected.status === "in_review";
+  const canApprove = selected.status === "pending";
+  const canReject = selected.status === "pending" || selected.status === "in_review";
   const votingOpen = selected.votingStatus === "open";
   const isDuality = selected.type === "duality";
   const ownerEmail = ownerQuery.data?.email || null;
@@ -194,32 +196,36 @@ export default function ContentRequestDetailPage() {
             {selected.votingStatus ? <StatusBadge status={selected.votingStatus} size="xs" /> : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            {canDecide && (
+            {(canApprove || canReject) && (
               <>
-                <button
-                  onClick={() => void handleStatusUpdate("approved")}
-                  disabled={isMutating}
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-emerald-600 disabled:opacity-50"
-                >
-                  {patchMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle className="h-4 w-4" />
-                  )}
-                  Approve
-                </button>
-                <button
-                  onClick={() => void handleStatusUpdate("rejected")}
-                  disabled={isMutating}
-                  className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-red-400 transition hover:bg-red-500 hover:text-white disabled:opacity-50"
-                >
-                  {patchMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <XCircle className="h-4 w-4" />
-                  )}
-                  Reject
-                </button>
+                {canApprove && (
+                  <button
+                    onClick={() => void handleStatusUpdate("approved")}
+                    disabled={isMutating}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-emerald-600 disabled:opacity-50"
+                  >
+                    {patchMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4" />
+                    )}
+                    Approve
+                  </button>
+                )}
+                {canReject && (
+                  <button
+                    onClick={() => void handleStatusUpdate("rejected")}
+                    disabled={isMutating}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-red-400 transition hover:bg-red-500 hover:text-white disabled:opacity-50"
+                  >
+                    {patchMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    Reject
+                  </button>
+                )}
               </>
             )}
             <button

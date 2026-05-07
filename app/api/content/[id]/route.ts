@@ -5,6 +5,13 @@ import { getDoc, updateDoc } from "@/lib/server/firestore";
 import type { ContentRequestDoc, DualityRequestDoc } from "@/lib/server/bmid";
 import { ensureVotingSession } from "@/lib/server/bmid";
 import { sendContentApprovalEmail } from "@/lib/server/email/transport";
+import {
+  buildApprovalNotificationCopy,
+  buildNotificationRequestDocPath,
+  buildUserPostDocPath,
+  notifyUser,
+  broadcastPostNotification,
+} from "@/lib/server/notifications";
 import { error, json } from "@/lib/server/response";
 
 type UserEmailDoc = { email?: string | null; name?: string | null; displayName?: string | null };
@@ -32,6 +39,31 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const requestedStatus = typeof body.status === "string" ? body.status : null;
 
   if (requestedStatus === "approved") {
+    console.log("[content][approve][debug] request_received", {
+      requestId: id,
+      ownerUserId: existing.userId,
+      ownerUserName: existing.userName,
+      postTitle: existing.postTitle,
+      requestType: existing.type,
+      currentStatus: existing.status,
+      currentVotingStatus: existing.votingStatus || null,
+    });
+
+    const alreadyHandledApproval =
+      existing.status === "in_review" ||
+      existing.votingStatus === "open" ||
+      existing.votingStatus === "finalized" ||
+      existing.status === "approved";
+    if (alreadyHandledApproval) {
+      console.log("[content][approve][debug] duplicate_approval_skipped", {
+        requestId: id,
+        ownerUserId: existing.userId,
+        currentStatus: existing.status,
+        currentVotingStatus: existing.votingStatus || null,
+      });
+      return json(existing);
+    }
+
     if (existing.type === "duality" && existing.taggedUserAction !== "accepted") {
       return error("tagged_user_pending", 400);
     }
@@ -70,6 +102,45 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       const fresh = (await getDoc<ContentRequestDoc>("contentRequests", id)) as ContentRequestDoc;
       await ensureVotingSession(fresh);
       const synced = await getDoc<ContentRequestDoc>("contentRequests", id);
+      console.log("[content][approve][debug] voting_opened", {
+        requestId: id,
+        ownerUserId: existing.userId,
+        syncedStatus: synced?.status || null,
+        syncedVotingStatus: synced?.votingStatus || null,
+      });
+
+      // BROADCAST Notification to Followers + Verified Users
+      if (existing.userId) {
+        const actorName = existing.userName || "User";
+        const postId = existing.postId ?? null;
+        const postDocPath = buildUserPostDocPath(existing.userId, postId);
+        const requestDocPath = buildNotificationRequestDocPath("content", id);
+        const { title, body } = buildApprovalNotificationCopy({
+          actorName,
+          source: "content",
+          requestType: existing.type === "duality" ? "duality" : "own",
+          postTitle: existing.postTitle ?? null,
+        });
+
+        console.log("[content][approve][debug] broadcast_started", {
+          requestId: id,
+          actorUid: existing.userId,
+          actorName,
+          title,
+        });
+        void broadcastPostNotification(existing.userId, actorName, {
+          type: "bmid_content_approved",
+          title,
+          body,
+          bmidRequestId: id,
+          bmidSource: "content",
+          bmidDecision: "accepted",
+          authorId: existing.userId,
+          postId,
+          docPath: postDocPath,
+          requestDocPath,
+        });
+      }
 
       // Email owner that admin approved + voting opened.
       // Duality flows go through /api/duality/[id] which sends its own email,
@@ -92,25 +163,44 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
   }
 
-  if (requestedStatus === "rejected" && existing.type === "duality") {
-    const duality = await getDoc<DualityRequestDoc>("dualityRequests", id);
-    if (duality) {
-      await updateDoc("dualityRequests", id, {
-        status: "rejected",
-        reviewedBy: body.reviewedBy ?? duality.reviewedBy ?? null,
-        adminNote: body.adminNote ?? duality.adminNote ?? null,
-        decisionHistory: [
-          ...(duality.decisionHistory || []),
-          {
-            action: "Rejected",
-            by: String(body.reviewedBy || "Admin"),
-            at: new Date().toISOString().split("T")[0],
-          },
-        ],
-        timeline: [
-          ...(duality.timeline || []),
-          { event: "Admin rejected", at: new Date().toISOString().split("T")[0] },
-        ],
+  if (requestedStatus === "rejected") {
+    if (existing.type === "duality") {
+      const duality = await getDoc<DualityRequestDoc>("dualityRequests", id);
+      if (duality) {
+        await updateDoc("dualityRequests", id, {
+          status: "rejected",
+          reviewedBy: body.reviewedBy ?? duality.reviewedBy ?? null,
+          adminNote: body.adminNote ?? duality.adminNote ?? null,
+          decisionHistory: [
+            ...(duality.decisionHistory || []),
+            {
+              action: "Rejected",
+              by: String(body.reviewedBy || "Admin"),
+              at: new Date().toISOString().split("T")[0],
+            },
+          ],
+          timeline: [
+            ...(duality.timeline || []),
+            { event: "Admin rejected", at: new Date().toISOString().split("T")[0] },
+          ],
+        });
+      }
+    }
+
+    // Direct Notify owner on rejection
+    if (existing.userId) {
+      const postId = existing.postId ?? null;
+      void notifyUser(existing.userId, {
+        type: "bmid_content_rejected",
+        title: "BMID Content Update",
+        body: `Your post "${existing.postTitle || "Untitled post"}" was not approved. Reason: ${String(body.rejectionReason || "Rejected by admin")}`,
+        bmidRequestId: id,
+        bmidSource: "content",
+        bmidDecision: "rejected",
+        authorId: existing.userId,
+        postId,
+        docPath: buildUserPostDocPath(existing.userId, postId),
+        requestDocPath: buildNotificationRequestDocPath("content", id),
       });
     }
   }

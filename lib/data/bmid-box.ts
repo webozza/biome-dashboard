@@ -108,6 +108,7 @@ export interface BmidBoxRequest {
     sentAt: string;
     recipient: string;
   }>;
+  votes?: BmidBoxVote[];
   history: BmidBoxHistoryEntry[];
 }
 

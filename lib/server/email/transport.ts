@@ -56,58 +56,11 @@ export async function sendVerificationEmail(
   ctx: VerificationContext
 ): Promise<void> {
   if (!to) return;
-
   const gmailConn = await loadConnection().catch(() => null);
   const brand = brandConfig(gmailConn?.email);
   const rendered =
     kind === "approved" ? renderApprovedEmail(brand, ctx) : renderRejectedEmail(brand, ctx);
-  const replyTo = gmailConn?.email || (process.env.SMTP_REPLY_TO || "").trim() || undefined;
-
-  if (gmailConn) {
-    try {
-      const sent = await sendGmail({
-        to,
-        subject: rendered.subject,
-        html: rendered.html,
-        text: rendered.text,
-        fromName: brand.brandName,
-        replyTo,
-      });
-      if (sent) {
-        console.log(`[email] sent via Gmail OAuth (${gmailConn.email}) to ${to}`);
-        return;
-      }
-      console.error("[email] Gmail connected but sendGmail returned false (no fallback)", { to, kind });
-    } catch (e) {
-      console.error("[email] Gmail send failed (admin Gmail is connected — not falling back to SMTP)", {
-        to,
-        kind,
-        error: (e as Error).message,
-      });
-    }
-    return;
-  }
-
-  const transporter = getTransporter();
-  if (!transporter) {
-    console.warn("[email] no mail transport configured (no Gmail connection, no SMTP env)");
-    return;
-  }
-
-  const fromEmail = (process.env.SMTP_FROM_EMAIL || "").trim();
-  try {
-    await transporter.sendMail({
-      from: `"${brand.brandName}" <${fromEmail}>`,
-      to,
-      replyTo,
-      subject: rendered.subject,
-      html: rendered.html,
-      text: rendered.text,
-    });
-    console.log(`[email] sent via SMTP (${fromEmail}) to ${to}`);
-  } catch (e) {
-    console.error("[email] smtp send failed", { to, kind, error: (e as Error).message });
-  }
+  await sendRendered(to, rendered, `verification-${kind}`);
 }
 
 async function sendRendered(

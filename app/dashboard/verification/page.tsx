@@ -2,10 +2,10 @@
 
 import { useDeferredValue, useMemo, useState } from "react";
 import {
+  BadgeCheck,
   CheckCircle,
   Loader2,
   Plus,
-  ShieldCheck,
   Trash2,
   Undo2,
   XCircle,
@@ -357,7 +357,7 @@ export default function VerificationPage() {
       render: (row: VerificationRequest) =>
         row.status === "approved" && row.bmidNumber ? (
           <span className={BMID_BADGE_CLASS}>
-            <ShieldCheck className="w-3.5 h-3.5 text-[#3b82f6]" />
+            <BadgeCheck className="w-3.5 h-3.5 text-[#3b82f6]" />
             {row.bmidNumber}
           </span>
         ) : (
@@ -522,7 +522,7 @@ export default function VerificationPage() {
   }
 
   if (!apiToken) {
-    return <AuthGate icon={ShieldCheck} title="Verification Requests" subtitle="Review and manage BMID verification requests" />;
+    return <AuthGate icon={BadgeCheck} title="Verification Requests" subtitle="Review and manage BMID verification requests" />;
   }
 
   return (
@@ -530,7 +530,7 @@ export default function VerificationPage() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-            <ShieldCheck className="h-7 w-7" />
+            <BadgeCheck className="h-7 w-7" />
           </div>
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-main">Verification Requests</h1>
@@ -661,7 +661,7 @@ export default function VerificationPage() {
                 <div>
                   <p className="text-xs text-tertiary mb-1">BMID Number</p>
                   <span className={`${BMID_BADGE_CLASS} text-sm`}>
-                    <ShieldCheck className="w-4 h-4 text-[#3b82f6]" />
+                    <BadgeCheck className="w-4 h-4 text-[#3b82f6]" />
                     {selected.bmidNumber}
                   </span>
                 </div>
@@ -682,7 +682,7 @@ export default function VerificationPage() {
 
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-primary" />
+                <BadgeCheck className="w-4 h-4 text-primary" />
                 <p className="text-xs font-semibold text-secondary uppercase tracking-wider">Submitted Proofs</p>
               </div>
 

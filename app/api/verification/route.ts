@@ -4,12 +4,18 @@ import { requireAdmin, requireFirebaseUser } from "@/lib/server/auth";
 import { db } from "@/lib/server/firebase";
 import { createDoc } from "@/lib/server/firestore";
 import { error, json } from "@/lib/server/response";
+import { ensureReservedBmidAssignmentsSynced } from "@/lib/server/bmid-number";
 
 export const dynamic = "force-dynamic";
 
-export const GET = buildList("verificationRequests", {
+const listVerificationRequests = buildList("verificationRequests", {
   allowedFilters: ["status", "platform", "userId"],
 });
+
+export async function GET(req: NextRequest) {
+  await ensureReservedBmidAssignmentsSynced();
+  return listVerificationRequests(req);
+}
 
 async function resolveUserByEmail(rawEmail: unknown) {
   const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";

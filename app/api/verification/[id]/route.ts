@@ -6,6 +6,13 @@ import { error, json } from "@/lib/server/response";
 import { sendVerificationEmail } from "@/lib/server/email/transport";
 import { notifyUser } from "@/lib/server/notifications";
 import { db } from "@/lib/server/firebase";
+import {
+  RESERVED_BMID_COUNT,
+  ensureReservedBmidAssignmentsSynced,
+  formatBmidNumber,
+  normalizeReservedSequence,
+  parseBmidSequence,
+} from "@/lib/server/bmid-number";
 
 export const dynamic = "force-dynamic";
 
@@ -23,18 +30,9 @@ type VerificationDoc = {
   bmidNumber?: string | null;
 };
 
-function parseBmidSequence(value: unknown) {
-  if (typeof value !== "string") return null;
-  const match = value.match(/^BMID-(\d+)$/i);
-  if (!match) return null;
-  return Number.parseInt(match[1], 10);
-}
-
-function formatBmidNumber(sequence: number) {
-  return `BMID-${String(sequence).padStart(3, "0")}`;
-}
-
 async function ensureApprovedUserState(userId: string): Promise<string | null> {
+  await ensureReservedBmidAssignmentsSynced();
+
   return db().runTransaction(async (tx) => {
     const userRef = db().collection("users").doc(userId);
     const userSnap = await tx.get(userRef);
@@ -59,10 +57,12 @@ async function ensureApprovedUserState(userId: string): Promise<string | null> {
     }
 
     const usersSnap = await tx.get(db().collection("users"));
-    let maxSequence = 0;
+    let maxSequence = RESERVED_BMID_COUNT;
     for (const doc of usersSnap.docs) {
       const sequence = parseBmidSequence(doc.data().bmidNumber);
-      if (sequence && sequence > maxSequence) maxSequence = sequence;
+      if (!sequence) continue;
+      const normalizedSequence = normalizeReservedSequence(sequence);
+      if (normalizedSequence > maxSequence) maxSequence = normalizedSequence;
     }
 
     const newBmidNumber = formatBmidNumber(maxSequence + 1);

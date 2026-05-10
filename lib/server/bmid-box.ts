@@ -19,6 +19,7 @@ import {
   listDocIds,
   updateDoc,
 } from "@/lib/server/firestore";
+import { db } from "@/lib/server/firebase";
 import { buildDualityRequestFromBox } from "@/lib/server/bmid";
 import { sendBoxApprovalEmail, sendBoxFinalizedEmail } from "@/lib/server/email/transport";
 import {
@@ -29,6 +30,15 @@ import {
 } from "@/lib/server/notifications";
 
 type UserEmailDoc = { email?: string | null; name?: string | null; displayName?: string | null };
+type SeedUserDoc = {
+  email?: string | null;
+  name?: string | null;
+  displayName?: string | null;
+  bmidNumber?: string | null;
+  verified?: boolean | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
 
 const REQUESTS_COLLECTION = "bmidBoxRequests";
 const SETTINGS_COLLECTION = "bmidBoxSettings";
@@ -39,6 +49,10 @@ export type BmidBoxRequestDoc = BmidBoxRequest & { id: string };
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function resolveSeedUserName(id: string, data: SeedUserDoc) {
+  return data.name || data.displayName || data.email || `Verified user ${id}`;
 }
 
 function identitySnapshot(userId: string | null): BmidBoxIdentitySnapshot | null {
@@ -542,24 +556,121 @@ export async function seedBmidBoxRequests(options: { force?: boolean } = {}) {
     await deleteManyDocs(REQUESTS_COLLECTION, ids);
   }
 
+  const usersSnap = await db().collection("users").where("verified", "==", true).get();
+  const verifiedUsers = usersSnap.docs
+    .map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as SeedUserDoc),
+    }))
+    .filter(
+      (user): user is SeedUserDoc & { id: string; bmidNumber: string } =>
+        typeof user.bmidNumber === "string" && user.bmidNumber.trim().length > 0
+    )
+    .sort((a, b) => {
+      const aAt = String(a.updatedAt || a.createdAt || "");
+      const bAt = String(b.updatedAt || b.createdAt || "");
+      return bAt.localeCompare(aAt);
+    })
+    .slice(0, 7);
+
+  const seedFixtures = verifiedUsers.map((user, index) => {
+    const template = seededRequests[index % seededRequests.length];
+    const createdAt = new Date(Date.now() - index * 60_000).toISOString();
+    const ownerName = resolveSeedUserName(user.id, user);
+
+    return {
+      id: template?.id || `box-seed-${index + 1}`,
+      ownerUserId: user.id,
+      taggedUserId: user.id,
+      ownerSnapshot: {
+        userId: user.id,
+        name: ownerName,
+        bmidNumber: user.bmidNumber,
+        verified: true,
+      },
+      taggedSnapshot: {
+        userId: user.id,
+        name: ownerName,
+        bmidNumber: user.bmidNumber,
+        verified: true,
+      },
+      type: "own" as const,
+      sourcePlatform: template.sourcePlatform,
+      sourceUrl: `${template.sourceUrl}${template.sourceUrl.includes("?") ? "&" : "?"}seedUser=${encodeURIComponent(user.id)}`,
+      previewData: {
+        ...template.previewData,
+        caption: `${ownerName} submitted a verified own-post into BMID Box.`,
+        description: "Fresh own request seeded for admin review and manual approval.",
+      },
+      currentStatus: "pending_admin_review" as const,
+      votingStatus: null,
+      acceptCount: 0,
+      ignoreCount: 0,
+      refuseCount: 0,
+      adminNotes: [],
+      rejectionReason: null,
+      removalReason: null,
+      createdAt,
+      updatedAt: createdAt,
+      submittedAt: createdAt,
+      reviewedAt: null,
+      votingStartAt: null,
+      votingEndAt: null,
+      finalizedAt: null,
+      taggedUserAction: "accepted" as const,
+      taggedUserActionAt: createdAt,
+      taggedUserActionNote: "Own request auto-confirmed",
+      ownerVerified: true,
+      taggedUserVerified: true,
+      verificationChecks: {
+        ownerVerified: true,
+        platformAllowed: true,
+        urlReachable: true,
+        duplicateUrl: false,
+        supportedContentType: true,
+      },
+      notificationEvents: [
+        {
+          id: `seed-notification-${index + 1}`,
+          type: "box_request_submitted" as const,
+          sentAt: createdAt,
+          recipient: ownerName,
+        },
+      ],
+      history: [
+        {
+          id: `${template?.id || `box-seed-${index + 1}`}-h1`,
+          requestId: template?.id || `box-seed-${index + 1}`,
+          actionType: "submitted" as const,
+          actorId: user.id,
+          actorName: ownerName,
+          note: "Request submitted",
+          createdAt,
+        },
+      ],
+    };
+  });
+
   const existingIds = new Set(await listDocIds(REQUESTS_COLLECTION));
   let insertedCount = 0;
-  let skippedCount = 0;
+  let updatedCount = 0;
 
-  for (const request of seededRequests) {
-    if (existingIds.has(request.id)) {
-      skippedCount += 1;
-      continue;
-    }
+  for (const request of seedFixtures) {
     const { id, ...payload } = request;
-    await createDoc(REQUESTS_COLLECTION, payload as unknown as Record<string, unknown>, id);
-    insertedCount += 1;
+    if (existingIds.has(id)) {
+      await updateDoc(REQUESTS_COLLECTION, id, payload as unknown as Record<string, unknown>);
+      updatedCount += 1;
+    } else {
+      await createDoc(REQUESTS_COLLECTION, payload as unknown as Record<string, unknown>, id);
+      insertedCount += 1;
+    }
   }
 
   return {
     insertedCount,
-    skippedCount,
-    totalSeedFixtures: seededRequests.length,
+    updatedCount,
+    totalSeedFixtures: seedFixtures.length,
+    sourceVerifiedUsers: verifiedUsers.length,
     forced: Boolean(options.force),
   };
 }

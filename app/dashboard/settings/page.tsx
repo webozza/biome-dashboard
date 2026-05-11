@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Settings, Save, Mail, Loader2, CheckCircle2, AlertCircle, Plug, Trash2, Send } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth-store";
@@ -15,6 +15,22 @@ type GmailStatus = {
 };
 
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={<SettingsLoading />}>
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
+function SettingsLoading() {
+  return (
+    <div className="flex items-center justify-center py-16">
+      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+    </div>
+  );
+}
+
+function SettingsContent() {
   const apiToken = useAuthStore((s) => s.apiToken);
   const user = useAuthStore((s) => s.user);
   const searchParams = useSearchParams();

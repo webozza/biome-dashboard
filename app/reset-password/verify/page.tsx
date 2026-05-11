@@ -1,11 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff, Hash, Loader2, Lock } from "lucide-react";
 import { readJson } from "@/lib/http";
 
 export default function ResetPasswordVerifyPage() {
+  return (
+    <Suspense fallback={<ResetPasswordVerifyLoading />}>
+      <ResetPasswordVerifyForm />
+    </Suspense>
+  );
+}
+
+function ResetPasswordVerifyLoading() {
+  return (
+    <div className="min-h-screen bg-white flex items-center justify-center">
+      <Loader2 className="w-6 h-6 text-emerald-600 animate-spin" />
+    </div>
+  );
+}
+
+function ResetPasswordVerifyForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = useMemo(() => (searchParams.get("email") || "").trim().toLowerCase(), [searchParams]);

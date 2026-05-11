@@ -227,7 +227,7 @@ export default function UsersPage() {
       label: "BMID",
       render: (r: UserDoc) =>
         r.bmidNumber ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-mono font-semibold">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono font-semibold">
             <ShieldCheck className="w-3 h-3" />
             {r.bmidNumber}
           </span>

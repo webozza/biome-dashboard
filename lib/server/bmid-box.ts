@@ -1,5 +1,4 @@
 import {
-  bmidBoxRequests as seededRequests,
   bmidBoxSettings as seededSettings,
   type BmidBoxHistoryEntry,
   type BmidBoxIdentitySnapshot,
@@ -10,7 +9,6 @@ import {
   type BmidBoxVoteType,
   type BmidBoxVotingStatus,
 } from "@/lib/data/bmid-box";
-import { users } from "@/lib/data/mock-data";
 import {
   createDoc,
   deleteManyDocs,
@@ -55,22 +53,24 @@ function resolveSeedUserName(id: string, data: SeedUserDoc) {
   return data.name || data.displayName || data.email || `Verified user ${id}`;
 }
 
-function identitySnapshot(userId: string | null): BmidBoxIdentitySnapshot | null {
+async function identitySnapshot(userId: string | null): Promise<BmidBoxIdentitySnapshot | null> {
   if (!userId) return null;
-  const user = users.find((entry) => entry.id === userId);
+  const user = await getDoc<SeedUserDoc>("users", userId).catch(() => null);
   if (!user) {
     return {
       userId,
       name: "Unknown user",
+      email: null,
       bmidNumber: null,
       verified: false,
     };
   }
   return {
-    userId: user.id,
-    name: user.name,
-    bmidNumber: user.bmidNumber,
-    verified: user.verified,
+    userId,
+    name: resolveSeedUserName(userId, user),
+    email: user.email,
+    bmidNumber: user.bmidNumber || null,
+    verified: Boolean(user.verified),
   };
 }
 
@@ -82,13 +82,20 @@ async function backfillRequestSnapshots() {
 
   await Promise.all(
     items.map(async (request) => {
-      if (request.ownerSnapshot && (request.taggedSnapshot || request.taggedUserId === null)) return;
+      // Force update snapshots to include email if missing
+      const ownerEmailMissing = request.ownerSnapshot && !request.ownerSnapshot.email;
+      const taggedEmailMissing = request.taggedSnapshot && !request.taggedSnapshot.email;
+
+      if (!ownerEmailMissing && !taggedEmailMissing && request.ownerSnapshot && (request.taggedSnapshot || request.taggedUserId === null)) return;
+
+      const [ownerSnapshot, taggedSnapshot] = await Promise.all([
+        identitySnapshot(request.ownerUserId),
+        identitySnapshot(request.taggedUserId),
+      ]);
+
       await updateDoc(REQUESTS_COLLECTION, request.id, {
-        ownerSnapshot: request.ownerSnapshot || identitySnapshot(request.ownerUserId),
-        taggedSnapshot:
-          request.taggedSnapshot !== undefined
-            ? request.taggedSnapshot
-            : identitySnapshot(request.taggedUserId),
+        ownerSnapshot,
+        taggedSnapshot,
       });
     })
   );
@@ -145,7 +152,27 @@ export async function listBmidBoxRequests() {
 
 export async function getBmidBoxRequestById(id: string) {
   await ensureBmidBoxSeeded();
-  return getDoc<BmidBoxRequest>(REQUESTS_COLLECTION, id);
+  const request = await getDoc<BmidBoxRequest>(REQUESTS_COLLECTION, id);
+  if (!request) return null;
+
+  // Surgical fix for missing emails in the requested document
+  const ownerEmailMissing = request.ownerSnapshot && !request.ownerSnapshot.email;
+  const taggedEmailMissing = request.taggedSnapshot && !request.taggedSnapshot.email;
+
+  if (ownerEmailMissing || taggedEmailMissing || !request.ownerSnapshot || (request.taggedSnapshot === undefined && request.taggedUserId !== null)) {
+    const [ownerSnapshot, taggedSnapshot] = await Promise.all([
+      request.ownerSnapshot && !ownerEmailMissing ? Promise.resolve(request.ownerSnapshot) : identitySnapshot(request.ownerUserId),
+      request.taggedSnapshot && !taggedEmailMissing ? Promise.resolve(request.taggedSnapshot) : identitySnapshot(request.taggedUserId),
+    ]);
+
+    await updateDoc(REQUESTS_COLLECTION, id, {
+      ownerSnapshot,
+      taggedSnapshot,
+    });
+    return getDoc<BmidBoxRequest>(REQUESTS_COLLECTION, id);
+  }
+
+  return request;
 }
 
 export async function listFilteredBmidBoxRequests(searchParams: URLSearchParams) {
@@ -563,58 +590,66 @@ export async function seedBmidBoxRequests(options: { force?: boolean } = {}) {
       ...(doc.data() as SeedUserDoc),
     }))
     .filter(
-      (user): user is SeedUserDoc & { id: string; bmidNumber: string } =>
-        typeof user.bmidNumber === "string" && user.bmidNumber.trim().length > 0
+      (user): user is SeedUserDoc & { id: string; bmidNumber: string; email: string } =>
+        typeof user.bmidNumber === "string" && user.bmidNumber.trim().length > 0 && typeof user.email === "string"
     )
     .sort((a, b) => {
       const aAt = String(a.updatedAt || a.createdAt || "");
       const bAt = String(b.updatedAt || b.createdAt || "");
       return bAt.localeCompare(aAt);
     })
-    .slice(0, 7);
+    .slice(0, 8);
 
   const seedFixtures = verifiedUsers.map((user, index) => {
-    const template = seededRequests[index % seededRequests.length];
+    const templateId = `box-seed-${index + 1}`;
     const createdAt = new Date(Date.now() - index * 60_000).toISOString();
+    const reviewedAt = new Date(Date.now() - index * 60_000 + 30_000).toISOString();
     const ownerName = resolveSeedUserName(user.id, user);
+    const platform = (["instagram", "tiktok", "youtube", "facebook"] as const)[index % 4];
+    const contentType = (["video", "photo", "post"] as const)[index % 3];
 
     return {
-      id: template?.id || `box-seed-${index + 1}`,
+      id: templateId,
       ownerUserId: user.id,
       taggedUserId: user.id,
       ownerSnapshot: {
         userId: user.id,
         name: ownerName,
+        email: user.email,
         bmidNumber: user.bmidNumber,
         verified: true,
       },
       taggedSnapshot: {
         userId: user.id,
         name: ownerName,
+        email: user.email,
         bmidNumber: user.bmidNumber,
         verified: true,
       },
       type: "own" as const,
-      sourcePlatform: template.sourcePlatform,
-      sourceUrl: `${template.sourceUrl}${template.sourceUrl.includes("?") ? "&" : "?"}seedUser=${encodeURIComponent(user.id)}`,
+      sourcePlatform: platform,
+      sourceUrl: `https://${platform}.com/p/${encodeURIComponent(templateId)}?seedUser=${encodeURIComponent(user.id)}`,
       previewData: {
-        ...template.previewData,
+        title: `${ownerName} seed request`,
+        thumbnailUrl: "",
+        embedEnabled: true,
+        contentType,
         caption: `${ownerName} submitted a verified own-post into BMID Box.`,
         description: "Fresh own request seeded for admin review and manual approval.",
       },
-      currentStatus: "pending_admin_review" as const,
-      votingStatus: null,
+      currentStatus: "pending_voting" as const,
+      votingStatus: "open" as const,
       acceptCount: 0,
       ignoreCount: 0,
       refuseCount: 0,
-      adminNotes: [],
+      adminNotes: ["Approved by admin and moved to voting"],
       rejectionReason: null,
       removalReason: null,
       createdAt,
-      updatedAt: createdAt,
+      updatedAt: reviewedAt,
       submittedAt: createdAt,
-      reviewedAt: null,
-      votingStartAt: null,
+      reviewedAt,
+      votingStartAt: reviewedAt,
       votingEndAt: null,
       finalizedAt: null,
       taggedUserAction: "accepted" as const,
@@ -636,16 +671,40 @@ export async function seedBmidBoxRequests(options: { force?: boolean } = {}) {
           sentAt: createdAt,
           recipient: ownerName,
         },
+        {
+          id: `seed-notification-voting-${index + 1}`,
+          type: "request_moved_to_voting" as const,
+          sentAt: reviewedAt,
+          recipient: ownerName,
+        },
       ],
       history: [
         {
-          id: `${template?.id || `box-seed-${index + 1}`}-h1`,
-          requestId: template?.id || `box-seed-${index + 1}`,
+          id: `${templateId}-h1`,
+          requestId: templateId,
           actionType: "submitted" as const,
           actorId: user.id,
           actorName: ownerName,
           note: "Request submitted",
           createdAt,
+        },
+        {
+          id: `${templateId}-h2`,
+          requestId: templateId,
+          actionType: "reviewed" as const,
+          actorId: "admin",
+          actorName: "Admin",
+          note: "Approved by admin and moved to voting",
+          createdAt: reviewedAt,
+        },
+        {
+          id: `${templateId}-h3`,
+          requestId: templateId,
+          actionType: "voting_opened" as const,
+          actorId: "admin",
+          actorName: "Admin",
+          note: "Voting opened",
+          createdAt: reviewedAt,
         },
       ],
     };

@@ -63,8 +63,10 @@ export async function POST(req: NextRequest) {
   const recorded = await recordOtp(email, otp);
   if (!recorded.ok) {
     if (recorded.reason === "rate_limited") {
+      const retryMinutes = Math.max(1, Math.ceil(recorded.retryAfterSeconds / 60));
       return error("rate_limited", 429, {
-        detail: `Too many reset requests. Try again in ${Math.ceil(PASSWORD_RESET_CONFIG.RATE_LIMIT_WINDOW_MS / 60000)} minutes.`,
+        detail: `Too many reset requests. Try again in ${retryMinutes} minutes.`,
+        retryAfterSeconds: recorded.retryAfterSeconds,
       });
     }
     return error("could_not_create_otp", 500);

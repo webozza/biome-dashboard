@@ -7,6 +7,8 @@ export const dynamic = "force-dynamic";
 
 const PRIVATE_STATUSES = new Set(["pending", "waiting_tagged", "rejected"]);
 
+type ContentRequestFeedItem = Record<string, unknown> & { id: string };
+
 export async function GET(req: NextRequest) {
   const user = await requireFirebaseUser(req);
   if (!user.ok) return error("unauthorized", 401, { reason: user.reason });
@@ -21,7 +23,7 @@ export async function GET(req: NextRequest) {
     const snap = await db().collection("contentRequests").get();
 
     const items = snap.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) }))
+      .map((doc): ContentRequestFeedItem => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) }))
       .filter((item) => {
         const status = String(item.status || "");
         if (statusFilter) return status === statusFilter;

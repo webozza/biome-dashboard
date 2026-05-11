@@ -113,8 +113,8 @@ function baseShell(opts: {
   intro: string;
   detailsRows: { label: string; value: string }[];
   extraBlockHtml?: string;
-  ctaLabel: string;
-  ctaHref: string;
+  ctaLabel?: string;
+  ctaHref?: string;
   footerNote: string;
 }): string {
   const { brand } = opts;
@@ -169,11 +169,15 @@ function baseShell(opts: {
                   </td>
                 </tr>
                 ${opts.extraBlockHtml ? `<tr><td style="padding-bottom:24px;">${opts.extraBlockHtml}</td></tr>` : ""}
-                <tr>
+                ${
+                  opts.ctaLabel && opts.ctaHref
+                    ? `<tr>
                   <td align="center" style="padding-top:4px;">
                     ${ctaButton(opts.ctaLabel, opts.ctaHref, opts.accentColor)}
                   </td>
-                </tr>
+                </tr>`
+                    : ""
+                }
               </table>
             </td>
           </tr>
@@ -213,8 +217,6 @@ export function renderApprovedEmail(brand: BrandConfig, ctx: VerificationContext
           ${escapeHtml(ctx.adminNote)}
         </div>`
       : "",
-    ctaLabel: "Open Biome Aura",
-    ctaHref: brand.appUrl,
     footerNote: "You're receiving this because you requested verification via the Biome Aura app.",
   });
   const text = [
@@ -227,7 +229,6 @@ export function renderApprovedEmail(brand: BrandConfig, ctx: VerificationContext
     `Status: Approved`,
     ctx.adminNote ? `\nNote from the team:\n${ctx.adminNote}` : "",
     ``,
-    `Open the app: ${brand.appUrl}`,
     `Questions? ${brand.supportEmail}`,
   ]
     .filter(Boolean)
@@ -323,8 +324,6 @@ export function renderContentApprovedEmail(brand: BrandConfig, ctx: ContentAppro
     intro:
       "Your BMID content has been approved by an admin and community voting is now open. Once voting concludes, you'll receive a separate email with the final result.",
     detailsRows,
-    ctaLabel: "Open Biome Aura",
-    ctaHref: brand.appUrl,
     footerNote: "You're receiving this because you submitted a BMID content request.",
   });
 
@@ -339,7 +338,6 @@ export function renderContentApprovedEmail(brand: BrandConfig, ctx: ContentAppro
     ctx.isDuality && ctx.taggedUserName ? `Tagged with: ${ctx.taggedUserName}` : "",
     `Status: Admin approved — voting open`,
     ``,
-    `Open the app: ${brand.appUrl}`,
     `Questions? ${brand.supportEmail}`,
   ]
     .filter(Boolean)
@@ -373,8 +371,6 @@ export function renderBoxApprovedEmail(brand: BrandConfig, ctx: BoxApprovalConte
     intro:
       "Your BMID Box content has been approved by an admin and community voting is now open. Once voting concludes, you'll receive a separate email with the final result.",
     detailsRows,
-    ctaLabel: "Open Biome Aura",
-    ctaHref: brand.appUrl,
     footerNote: "You're receiving this because you submitted a BMID Box request.",
   });
 
@@ -390,7 +386,6 @@ export function renderBoxApprovedEmail(brand: BrandConfig, ctx: BoxApprovalConte
     ctx.isDuality && ctx.taggedUserName ? `Tagged with: ${ctx.taggedUserName}` : "",
     `Status: Admin approved — voting open`,
     ``,
-    `Open the app: ${brand.appUrl}`,
     `Questions? ${brand.supportEmail}`,
   ]
     .filter(Boolean)
@@ -479,8 +474,6 @@ export function renderContentFinalizedEmail(brand: BrandConfig, ctx: Finalizatio
     headline: `${copy.headlinePrefix}, ${firstName}`,
     intro: copy.intro,
     detailsRows,
-    ctaLabel: "Open Biome Aura",
-    ctaHref: brand.appUrl,
     footerNote: "You're receiving this because you submitted a BMID content request.",
   });
 
@@ -495,7 +488,6 @@ export function renderContentFinalizedEmail(brand: BrandConfig, ctx: Finalizatio
     `Outcome: ${copy.statusLabel.replace(/^Final: /, "")}`,
     `Final votes: Accept ${ctx.voteAccept ?? 0} · Ignore ${ctx.voteIgnore ?? 0} · Refuse ${ctx.voteRefuse ?? 0}`,
     ``,
-    `Open the app: ${brand.appUrl}`,
     `Questions? ${brand.supportEmail}`,
   ]
     .filter(Boolean)
@@ -539,8 +531,6 @@ export function renderBoxFinalizedEmail(brand: BrandConfig, ctx: FinalizationCon
     headline: `${copy.headlinePrefix}, ${firstName}`,
     intro: copy.intro,
     detailsRows,
-    ctaLabel: "Open Biome Aura",
-    ctaHref: brand.appUrl,
     footerNote: "You're receiving this because you submitted a BMID Box request.",
   });
 
@@ -556,7 +546,6 @@ export function renderBoxFinalizedEmail(brand: BrandConfig, ctx: FinalizationCon
     `Outcome: ${copy.statusLabel.replace(/^Final: /, "")}`,
     `Final votes: Accept ${ctx.voteAccept ?? 0} · Ignore ${ctx.voteIgnore ?? 0} · Refuse ${ctx.voteRefuse ?? 0}`,
     ``,
-    `Open the app: ${brand.appUrl}`,
     `Questions? ${brand.supportEmail}`,
   ]
     .filter(Boolean)
@@ -604,8 +593,6 @@ export function renderPasswordResetOtpEmail(brand: BrandConfig, ctx: PasswordRes
       { label: "Code expiry", value: `${ctx.expiresInMinutes} minutes` },
     ],
     extraBlockHtml: otpBlock,
-    ctaLabel: "Open Biome Aura",
-    ctaHref: brand.appUrl,
     footerNote: "Never share this code with anyone. Our team will never ask for it.",
   });
 

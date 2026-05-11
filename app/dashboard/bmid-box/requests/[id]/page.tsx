@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ExternalLink,
   Loader2,
-  MessageSquarePlus,
   ThumbsDown,
   ThumbsUp,
   Trash2,
@@ -98,11 +97,29 @@ export default function BmidBoxRequestDetailPage() {
     const base: ActionDef[] = [];
     switch (request.currentStatus) {
       case "submitted":
+        base.push(
+          {
+            key: "approve",
+            label: "Open Voting",
+            icon: CheckCircle2,
+            tone: "primary",
+            path: `/api/bmid-box/requests/${id}/approve`,
+          },
+          {
+            key: "reject",
+            label: "Reject",
+            icon: XCircle,
+            tone: "danger",
+            path: `/api/bmid-box/requests/${id}/reject`,
+            prompt: { label: "Rejection reason", field: "rejectionReason", initial: "Rejected by admin" },
+          }
+        );
+        break;
       case "pending_admin_review":
         base.push(
           {
             key: "approve",
-            label: request.type === "duality" ? "Send To Tagged" : "Open Voting",
+            label: "Open Voting",
             icon: CheckCircle2,
             tone: "primary",
             path: `/api/bmid-box/requests/${id}/approve`,
@@ -181,13 +198,6 @@ export default function BmidBoxRequestDetailPage() {
     actionMutation.mutate({ path: action.path, body });
   }
 
-  function addNote() {
-    const note = window.prompt("Admin note");
-    if (!note) return;
-    setSubmittingKey("note");
-    actionMutation.mutate({ path: `/api/bmid-box/requests/${id}/notes`, body: { note } });
-  }
-
   if (detailQuery.isLoading || !request) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center text-muted">
@@ -234,14 +244,6 @@ export default function BmidBoxRequestDetailPage() {
                 </button>
               );
             })}
-            <button
-              onClick={addNote}
-              disabled={submittingKey === "note"}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-muted transition hover:text-primary disabled:opacity-50"
-            >
-              {submittingKey === "note" ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquarePlus className="h-4 w-4" />}
-              Note
-            </button>
           </div>
         </div>
       </div>
@@ -280,27 +282,42 @@ export default function BmidBoxRequestDetailPage() {
 
           <section className="card p-5">
             <p className="text-[10px] font-black uppercase tracking-[0.25em] text-muted">Participants</p>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className={`mt-4 grid gap-4 ${request.type === "duality" ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
               <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">Owner</p>
                 <p className="mt-1 text-sm font-bold text-main">{request.ownerSnapshot?.name || "Unknown"}</p>
-                <div className="mt-2 flex items-center gap-2 text-xs text-muted">
-                  <StatusBadge status={request.ownerSnapshot?.verified ? "approved" : "submitted"} size="xs" />
-                  <span>{request.ownerSnapshot?.bmidNumber || "No BMID"}</span>
+                <p className="mt-1 text-xs text-muted">{request.ownerSnapshot?.email || "No email"}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">
+                    {request.ownerSnapshot?.verified ? "Approved" : "Submitted"}
+                  </span>
+                  <span
+                    className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400"
+                    title={request.ownerSnapshot?.bmidNumber || "No BMID"}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                    {request.ownerSnapshot?.bmidNumber || "No BMID"}
+                  </span>
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">Tagged</p>
-                <p className="mt-1 text-sm font-bold text-main">
-                  {request.taggedSnapshot?.name || (request.type === "own" ? "—" : "Not tagged")}
-                </p>
-                {request.type === "duality" ? (
+              {request.type === "duality" ? (
+                <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">Tagged</p>
+                  <p className="mt-1 text-sm font-bold text-main">{request.taggedSnapshot?.name || "Not tagged"}</p>
+                  <p className="mt-1 text-xs text-muted">{request.taggedSnapshot?.email || "No email"}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
                     <StatusBadge status={request.taggedUserAction || "pending"} size="xs" />
+                    <span
+                      className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400"
+                      title={request.taggedSnapshot?.bmidNumber || "No BMID"}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                      {request.taggedSnapshot?.bmidNumber || "No BMID"}
+                    </span>
                     {request.taggedUserActionNote ? <span>{request.taggedUserActionNote}</span> : null}
                   </div>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
           </section>
 

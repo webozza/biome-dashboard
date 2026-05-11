@@ -6,22 +6,36 @@ export type GmailConnection = {
   refreshToken: string;
   accessToken?: string | null;
   tokenExpiresAt?: string | null;
+  scopes?: string[];
   connectedAt?: string;
   connectedBy?: string | null;
 };
 
 const DOC_PATH = "adminSettings/gmail";
+const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 const SCOPES = [
-  "https://www.googleapis.com/auth/gmail.send",
+  GMAIL_SEND_SCOPE,
   "https://www.googleapis.com/auth/userinfo.email",
   "openid",
 ];
+
+export type GmailSendResult =
+  | { ok: true }
+  | { ok: false; code: "not_connected" | "missing_scope" | "send_failed"; error: string };
 
 export function getOAuthConfig() {
   const clientId = (process.env.GOOGLE_OAUTH_CLIENT_ID || "").trim();
   const clientSecret = (process.env.GOOGLE_OAUTH_CLIENT_SECRET || "").trim();
   const redirectUri = (process.env.GOOGLE_OAUTH_REDIRECT_URI || "").trim();
-  if (!clientId || !clientSecret || !redirectUri) return null;
+  
+  if (!clientId || !clientSecret || !redirectUri) {
+    console.error("[gmail] Missing OAuth environment variables", { 
+      hasClientId: !!clientId, 
+      hasClientSecret: !!clientSecret, 
+      hasRedirectUri: !!redirectUri 
+    });
+    return null;
+  }
   return { clientId, clientSecret, redirectUri };
 }
 
@@ -39,8 +53,16 @@ export function buildAuthUrl(state: string): string | null {
     prompt: "consent",
     scope: SCOPES,
     state,
-    include_granted_scopes: true,
+    include_granted_scopes: false,
   });
+}
+
+function parseScopes(scope: string | string[] | null | undefined): string[] {
+  if (Array.isArray(scope)) return scope;
+  return String(scope || "")
+    .split(/\s+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 export async function exchangeCode(code: string): Promise<GmailConnection | null> {
@@ -64,6 +86,7 @@ export async function exchangeCode(code: string): Promise<GmailConnection | null
     refreshToken: tokens.refresh_token,
     accessToken: tokens.access_token ?? null,
     tokenExpiresAt: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
+    scopes: parseScopes(tokens.scope),
   };
 }
 
@@ -90,6 +113,7 @@ export async function loadConnection(): Promise<GmailConnection | null> {
     refreshToken: data.refreshToken,
     accessToken: data.accessToken ?? null,
     tokenExpiresAt: data.tokenExpiresAt ?? null,
+    scopes: Array.isArray(data.scopes) ? data.scopes : [],
     connectedAt: data.connectedAt,
     connectedBy: data.connectedBy ?? null,
   };
@@ -101,17 +125,34 @@ export async function clearConnection() {
 
 export async function getAuthedClient(): Promise<{ client: Auth.OAuth2Client; email: string } | null> {
   const conn = await loadConnection();
-  if (!conn) return null;
+  if (!conn) {
+    console.error("[gmail] loadConnection failed - no stored credentials found");
+    return null;
+  }
+  
   const client = createOAuthClient();
-  if (!client) return null;
+  if (!client) {
+    console.error("[gmail] createOAuthClient failed - check environment variables");
+    return null;
+  }
+  
   client.setCredentials({ refresh_token: conn.refreshToken });
 
   try {
     const { token } = await client.getAccessToken();
     if (token) {
       client.setCredentials({ refresh_token: conn.refreshToken, access_token: token });
+      const tokenInfo = await client.getTokenInfo(token);
+      const scopes = parseScopes(tokenInfo.scopes);
+      if (!scopes.includes(GMAIL_SEND_SCOPE)) {
+        console.error("[gmail] access token is missing gmail.send scope", { scopes });
+        return null;
+      }
+    } else {
+      console.error("[gmail] getAccessToken returned empty token");
     }
-  } catch {
+  } catch (e) {
+    console.error("[gmail] getAccessToken failed", (e as Error).message);
     return null;
   }
 
@@ -125,9 +166,16 @@ export async function sendGmail(opts: {
   text: string;
   fromName: string;
   replyTo?: string;
-}): Promise<boolean> {
+}): Promise<GmailSendResult> {
   const authed = await getAuthedClient();
-  if (!authed) return false;
+  if (!authed) {
+    console.error("[gmail] sendGmail failed: could not get authed client");
+    return {
+      ok: false,
+      code: "not_connected",
+      error: "Gmail is not connected or the stored token is missing the gmail.send scope. Disconnect and connect Gmail again.",
+    };
+  }
 
   const boundary = "biome_" + Math.random().toString(36).slice(2);
   const headers = [
@@ -162,12 +210,29 @@ export async function sendGmail(opts: {
     .replace(/=+$/, "");
 
   const gmail = google.gmail({ version: "v1", auth: authed.client });
-  await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
-  return true;
+  try {
+    console.log("[gmail] Attempting to send message to", opts.to);
+    await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+    console.log("[gmail] Message sent successfully");
+    return { ok: true };
+  } catch (e) {
+    console.error("[gmail] API call failed during send", e);
+    const message = String((e as Error).message || "");
+    const responseData = (e as { response?: { data?: unknown } }).response?.data;
+    const scopeError =
+      message.toLowerCase().includes("insufficient authentication scopes") ||
+      JSON.stringify(responseData || "").toLowerCase().includes("insufficient authentication scopes");
+    return {
+      ok: false,
+      code: scopeError ? "missing_scope" : "send_failed",
+      error: scopeError
+        ? "Gmail token is missing the gmail.send scope. Disconnect and connect Gmail again."
+        : message || "Gmail API send failed",
+    };
+  }
 }
 
 function encodeHeader(value: string): string {
-  // eslint-disable-next-line no-control-regex
   if (/^[\x00-\x7F]*$/.test(value)) return value;
   return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
 }

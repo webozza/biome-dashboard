@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { auth, db } from "@/lib/firebase-client";
 import { doc, getDoc } from "firebase/firestore";
+import { readJson } from "@/lib/http";
 import {
   EmailAuthProvider,
   reauthenticateWithCredential,
-  sendPasswordResetEmail,
   updatePassword,
 } from "firebase/auth";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
@@ -26,6 +26,7 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
+  Hash,
 } from "lucide-react";
 
 type ProfileDoc = {
@@ -78,7 +79,11 @@ export default function ProfilePage() {
   const [pwError, setPwError] = useState<string | null>(null);
   const [pwNotice, setPwNotice] = useState<string | null>(null);
 
-  // Reset email state
+  // OTP Reset state
+  const [otpMode, setOtpMode] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpNewPw, setOtpNewPw] = useState("");
+  const [otpConfirmPw, setOtpConfirmPw] = useState("");
   const [resetBusy, setResetBusy] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetNotice, setResetNotice] = useState<string | null>(null);
@@ -87,6 +92,8 @@ export default function ProfilePage() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showOtpNew, setShowOtpNew] = useState(false);
+  const [showOtpConfirm, setShowOtpConfirm] = useState(false);
 
   // Post-update session prompt
   const [sessionPromptOpen, setSessionPromptOpen] = useState(false);
@@ -164,7 +171,7 @@ export default function ProfilePage() {
     }
   };
 
-  const handleSendResetEmail = async () => {
+  const handleRequestOtp = async () => {
     setResetError(null);
     setResetNotice(null);
     const target = user?.email || auth.currentUser?.email;
@@ -174,12 +181,56 @@ export default function ProfilePage() {
     }
     try {
       setResetBusy(true);
-      await sendPasswordResetEmail(auth, target);
-      setResetNotice(`Password reset link sent to ${target}.`);
+      const resp = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: target }),
+      });
+      await readJson(resp);
+      setOtpMode(true);
+      setResetNotice(`OTP sent to ${target}.`);
     } catch (e) {
-      const code = (e as { code?: string })?.code || "";
-      const msg = (e as Error)?.message || "Failed to send reset email.";
-      setResetError(mapAuthError(code, msg));
+      setResetError(e instanceof Error ? e.message : "Failed to send OTP.");
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
+  const handleResetWithOtp = async () => {
+    setResetError(null);
+    setResetNotice(null);
+    const target = user?.email || auth.currentUser?.email;
+    if (!target) return;
+
+    if (!otp || otp.length !== 6) {
+      setResetError("Please enter a valid 6-digit OTP.");
+      return;
+    }
+    if (otpNewPw.length < 6) {
+      setResetError("New password must be at least 6 characters.");
+      return;
+    }
+    if (otpNewPw !== otpConfirmPw) {
+      setResetError("Passwords do not match.");
+      return;
+    }
+
+    try {
+      setResetBusy(true);
+      const resp = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: target, otp, newPassword: otpNewPw }),
+      });
+      await readJson(resp);
+      setResetNotice("Password reset successfully.");
+      setOtpMode(false);
+      setOtp("");
+      setOtpNewPw("");
+      setOtpConfirmPw("");
+      setSessionPromptOpen(true);
+    } catch (e) {
+      setResetError(e instanceof Error ? e.message : "Failed to reset password.");
     } finally {
       setResetBusy(false);
     }
@@ -322,27 +373,90 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* Reset Email */}
+        {/* Reset Password with OTP */}
         <div className="space-y-4 pt-6 border-t border-border">
           <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted">
             <Send className="w-3.5 h-3.5" />
             Forgot your password?
           </div>
           <p className="text-sm text-muted">
-            We&apos;ll email you a link to reset your password. Useful if you don&apos;t remember your current
+            We&apos;ll email you a 6-digit code to reset your password. Useful if you don&apos;t remember your current
             password.
           </p>
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={handleSendResetEmail}
-              disabled={resetBusy || !email || email === "—"}
-              className="btn-secondary flex items-center gap-2"
-            >
-              {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              Send Reset Email
-            </button>
-            <span className="text-xs text-muted">to {email}</span>
-          </div>
+
+          {!otpMode ? (
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={handleRequestOtp}
+                disabled={resetBusy || !email || email === "—"}
+                className="btn-secondary flex items-center gap-2"
+              >
+                {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Send Reset OTP
+              </button>
+              <span className="text-xs text-muted">to {email}</span>
+            </div>
+          ) : (
+            <div className="space-y-4 bg-surface-hover border border-border rounded-2xl p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-muted mb-2">
+                    6-Digit OTP
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="123456"
+                      className="w-full input-premium pl-10"
+                    />
+                    <Hash className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-muted mb-2">
+                    New password
+                  </label>
+                  <PasswordInput
+                    value={otpNewPw}
+                    onChange={setOtpNewPw}
+                    show={showOtpNew}
+                    onToggle={() => setShowOtpNew((v) => !v)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-muted mb-2">
+                    Confirm password
+                  </label>
+                  <PasswordInput
+                    value={otpConfirmPw}
+                    onChange={setOtpConfirmPw}
+                    show={showOtpConfirm}
+                    onToggle={() => setShowOtpConfirm((v) => !v)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap pt-2">
+                <button
+                  onClick={handleResetWithOtp}
+                  disabled={resetBusy || otp.length !== 6 || otpNewPw.length < 6}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Reset Password
+                </button>
+                <button
+                  onClick={() => setOtpMode(false)}
+                  disabled={resetBusy}
+                  className="btn-ghost text-xs"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {resetNotice && (
             <div className="px-4 py-3 rounded-xl bg-primary/5 border border-primary/20 text-xs font-bold text-primary flex items-center gap-2">

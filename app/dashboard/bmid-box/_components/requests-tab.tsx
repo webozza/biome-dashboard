@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { ExternalLink, Loader2, Plus, RotateCcw, Sparkles, X } from "lucide-react";
+import { ExternalLink, Loader2, Plus, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BmidBoxPlatform, BmidBoxRequest, BmidBoxRequestType } from "@/lib/data/bmid-box";
 import { DataTable } from "@/components/ui/data-table";
@@ -16,8 +16,6 @@ import {
   createBmidBoxRequest,
   fetchBmidBoxRequests,
   postBmidBoxAction,
-  resetBmidBoxRequestsApi,
-  seedBmidBoxRequestsApi,
 } from "@/lib/bmid-box-client";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { formatDate } from "@/lib/format";
@@ -92,26 +90,6 @@ export function RequestsTab() {
     queryKey: ["bmid-box", "requests"],
     queryFn: () => fetchBmidBoxRequests(apiToken!),
     enabled: Boolean(apiToken),
-  });
-
-  const seedMutation = useMutation({
-    mutationFn: (force: boolean) => seedBmidBoxRequestsApi(apiToken!, force),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
-      window.alert(
-        `Seed complete. Inserted ${result.insertedCount}, skipped ${result.skippedCount} of ${result.totalSeedFixtures}.`
-      );
-    },
-    onError: (err: unknown) => window.alert(`Seed failed: ${(err as Error).message}`),
-  });
-
-  const resetMutation = useMutation({
-    mutationFn: () => resetBmidBoxRequestsApi(apiToken!),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
-      window.alert(`Deleted ${result.deletedCount} Box requests.`);
-    },
-    onError: (err: unknown) => window.alert(`Reset failed: ${(err as Error).message}`),
   });
 
   const createMutation = useMutation({
@@ -295,24 +273,6 @@ export function RequestsTab() {
           <Plus className="h-4 w-4" />
           New Request
         </button>
-        <button
-          onClick={() => seedMutation.mutate(false)}
-          disabled={seedMutation.isPending}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-main transition hover:border-primary/30 hover:text-primary disabled:opacity-50"
-        >
-          {seedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          Seed Demo
-        </button>
-        <button
-          onClick={() => {
-            if (window.confirm("Delete ALL Box requests from Firestore?")) resetMutation.mutate();
-          }}
-          disabled={resetMutation.isPending}
-          className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-red-400 transition hover:bg-red-500 hover:text-white disabled:opacity-50"
-        >
-          {resetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          Reset
-        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
@@ -410,7 +370,7 @@ export function RequestsTab() {
             window.location.href = `/dashboard/bmid-box/requests/${request.id}`;
           }}
           emptyMessage="No Box requests found"
-          emptyDescription="Try a different filter or seed demo data"
+          emptyDescription="Try a different filter"
           loading={listQuery.isLoading}
         />
       </div>

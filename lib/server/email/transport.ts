@@ -1,4 +1,3 @@
-import nodemailer, { type Transporter } from "nodemailer";
 import {
   renderApprovedEmail,
   renderRejectedEmail,
@@ -15,27 +14,6 @@ import {
   type PasswordResetOtpContext,
 } from "./templates";
 import { loadConnection, sendGmail } from "./gmail-oauth";
-
-let cached: Transporter | null = null;
-
-function getTransporter(): Transporter | null {
-  if (cached) return cached;
-  const host = (process.env.SMTP_HOST || "").trim();
-  const user = (process.env.SMTP_USER || "").trim();
-  const pass = (process.env.SMTP_PASSWORD || "").trim();
-  if (!host || !user || !pass) return null;
-
-  const port = Number(process.env.SMTP_PORT || 587);
-  const secure = (process.env.SMTP_SECURE || "").toLowerCase() === "true" || port === 465;
-
-  cached = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: { user, pass },
-  });
-  return cached;
-}
 
 function brandConfig(overrideSupportEmail?: string | null): BrandConfig {
   const appUrl = (process.env.PUBLIC_BASE_URL || "https://app.biome-aura.com/").trim();
@@ -76,7 +54,7 @@ async function sendRendered(
 
   if (gmailConn) {
     try {
-      const sent = await sendGmail({
+      const result = await sendGmail({
         to,
         subject: rendered.subject,
         html: rendered.html,
@@ -84,42 +62,25 @@ async function sendRendered(
         fromName: brand.brandName,
         replyTo,
       });
-      if (sent) {
+      if (result.ok) {
         console.log(`[email] sent via Gmail OAuth (${gmailConn.email}) to ${to} [${logTag}]`);
         return;
       }
-      console.error("[email] Gmail connected but sendGmail returned false — falling back to SMTP", {
+      console.error("[email] Gmail connected but sendGmail returned false", {
         to,
         logTag,
+        error: result.error,
+        code: result.code,
       });
     } catch (e) {
-      console.error("[email] Gmail send failed — falling back to SMTP", {
+      console.error("[email] Gmail send failed", {
         to,
         logTag,
         error: (e as Error).message,
       });
     }
-  }
-
-  const transporter = getTransporter();
-  if (!transporter) {
-    console.warn("[email] no mail transport configured (Gmail unavailable, SMTP env missing)");
-    return;
-  }
-
-  const fromEmail = (process.env.SMTP_FROM_EMAIL || "").trim();
-  try {
-    await transporter.sendMail({
-      from: `"${brand.brandName}" <${fromEmail}>`,
-      to,
-      replyTo,
-      subject: rendered.subject,
-      html: rendered.html,
-      text: rendered.text,
-    });
-    console.log(`[email] sent via SMTP (${fromEmail}) to ${to} [${logTag}]`);
-  } catch (e) {
-    console.error("[email] smtp send failed", { to, logTag, error: (e as Error).message });
+  } else {
+    console.warn("[email] no Gmail OAuth configured, mail dropped", { to, logTag });
   }
 }
 
@@ -183,14 +144,14 @@ export async function sendRawEmail(opts: {
   subject: string;
   html: string;
   text: string;
-}): Promise<{ ok: boolean; transport: "gmail" | "smtp" | "none"; error?: string; fromEmail?: string }> {
+}): Promise<{ ok: boolean; transport: "gmail" | "none"; error?: string; fromEmail?: string }> {
   const gmailConn = await loadConnection().catch(() => null);
   const brand = brandConfig(gmailConn?.email);
   const replyTo = gmailConn?.email || (process.env.SMTP_REPLY_TO || "").trim() || undefined;
 
   if (gmailConn) {
     try {
-      const sent = await sendGmail({
+      const result = await sendGmail({
         to: opts.to,
         subject: opts.subject,
         html: opts.html,
@@ -198,28 +159,12 @@ export async function sendRawEmail(opts: {
         fromName: brand.brandName,
         replyTo,
       });
-      if (sent) return { ok: true, transport: "gmail", fromEmail: gmailConn.email };
-      return { ok: false, transport: "gmail", error: "sendGmail returned false (authed client unavailable)" };
+      if (result.ok) return { ok: true, transport: "gmail", fromEmail: gmailConn.email };
+      return { ok: false, transport: "gmail", error: result.error };
     } catch (e) {
       return { ok: false, transport: "gmail", error: (e as Error).message };
     }
   }
 
-  const transporter = getTransporter();
-  if (!transporter) return { ok: false, transport: "none", error: "No mail transport configured" };
-
-  const fromEmail = (process.env.SMTP_FROM_EMAIL || "").trim();
-  try {
-    await transporter.sendMail({
-      from: `"${brand.brandName}" <${fromEmail}>`,
-      to: opts.to,
-      replyTo,
-      subject: opts.subject,
-      html: opts.html,
-      text: opts.text,
-    });
-    return { ok: true, transport: "smtp", fromEmail };
-  } catch (e) {
-    return { ok: false, transport: "smtp", error: (e as Error).message };
-  }
+  return { ok: false, transport: "none", error: "No Gmail OAuth configured" };
 }

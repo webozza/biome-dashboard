@@ -10,7 +10,6 @@ import {
   Loader2,
   Mail,
   Minus,
-  ShieldCheck,
   ThumbsDown,
   ThumbsUp,
   Trash2,
@@ -34,6 +33,9 @@ type UserDoc = {
 
 const NEUTRAL_FIELD_CLASS =
   "w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-main outline-none transition-colors focus:border-white/20";
+
+const BMID_BADGE_CLASS =
+  "inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400";
 
 export default function ContentRequestDetailPage() {
   const params = useParams<{ id: string }>();
@@ -290,8 +292,8 @@ export default function ContentRequestDetailPage() {
                 <p className="mt-1 text-sm font-bold text-main">{selected.userName}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
                   {ownerBmid ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-mono font-semibold">
-                      <ShieldCheck className="w-3 h-3" />
+                    <span className={BMID_BADGE_CLASS} title={ownerBmid}>
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
                       {ownerBmid}
                     </span>
                   ) : (
@@ -317,8 +319,8 @@ export default function ContentRequestDetailPage() {
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
                     <StatusBadge status={selected.taggedUserAction || "pending"} size="xs" />
                     {taggedBmid ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-mono font-semibold">
-                        <ShieldCheck className="w-3 h-3" />
+                      <span className={BMID_BADGE_CLASS} title={taggedBmid}>
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
                         {taggedBmid}
                       </span>
                     ) : null}

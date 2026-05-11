@@ -1,11 +1,10 @@
 import { NextRequest } from "next/server";
 import { requireFirebaseUser } from "@/lib/server/auth";
 import { db } from "@/lib/server/firebase";
-import { createDoc, getDoc } from "@/lib/server/firestore";
+import { createDoc, getDoc, listDocIds } from "@/lib/server/firestore";
 import { buildDualityRequestFromBox } from "@/lib/server/bmid";
 import { ensureBmidBoxSeeded, getBmidBoxSettings } from "@/lib/server/bmid-box";
 import { error, json } from "@/lib/server/response";
-import { bmidBoxRequests as seededBoxRequests } from "@/lib/data/bmid-box";
 
 type UserDoc = {
   id?: string;
@@ -26,6 +25,17 @@ function isVerifiedUser(user: UserDoc | null | undefined) {
 }
 
 export const dynamic = "force-dynamic";
+
+async function nextBoxRequestId() {
+  const ids = await listDocIds("bmidBoxRequests");
+  const numericIds = ids
+    .map((id) => /^box-(\d+)$/.exec(id)?.[1])
+    .filter((value): value is string => Boolean(value))
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value));
+  const next = Math.max(2400, ...numericIds) + 1;
+  return `box-${next}`;
+}
 
 export async function GET(req: NextRequest) {
   const auth = await requireFirebaseUser(req);
@@ -117,8 +127,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const numericId = 2401 + seededBoxRequests.length + Math.floor(Math.random() * 100000);
-  const id = `box-${numericId}`;
+  const id = await nextBoxRequestId();
   const now = new Date().toISOString();
   const taggedIdentity = (type === "own" ? owner : tagged)!;
 

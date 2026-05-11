@@ -1,9 +1,8 @@
 import { NextRequest } from "next/server";
 import { guard } from "@/lib/server/guard";
-import { createDoc, getDoc } from "@/lib/server/firestore";
+import { createDoc, getDoc, listDocIds } from "@/lib/server/firestore";
 import { buildDualityRequestFromBox } from "@/lib/server/bmid";
 import { error, json } from "@/lib/server/response";
-import { bmidBoxRequests } from "@/lib/data/bmid-box";
 import {
   ensureBmidBoxSeeded,
   getBmidBoxSettings,
@@ -25,6 +24,17 @@ function userName(user: UserDoc, fallback = "Unknown user") {
 }
 
 export const dynamic = "force-dynamic";
+
+async function nextBoxRequestId() {
+  const ids = await listDocIds("bmidBoxRequests");
+  const numericIds = ids
+    .map((id) => /^box-(\d+)$/.exec(id)?.[1])
+    .filter((value): value is string => Boolean(value))
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value));
+  const next = Math.max(2400, ...numericIds) + 1;
+  return `box-${next}`;
+}
 
 export async function GET(req: NextRequest) {
   const g = guard(req);
@@ -98,8 +108,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const numericId = 2401 + bmidBoxRequests.length + Math.floor(Math.random() * 1000);
-  const id = `box-${numericId}`;
+  const id = await nextBoxRequestId();
   const now = new Date().toISOString();
 
   const taggedIdentity = type === "own" ? owner : tagged!;
@@ -112,12 +121,14 @@ export async function POST(req: NextRequest) {
       ownerSnapshot: {
         userId: ownerUserId,
         name: userName(owner),
+        email: owner.email,
         bmidNumber: owner.bmidNumber,
         verified: Boolean(owner.verified),
       },
       taggedSnapshot: {
         userId: taggedIdentity.id,
         name: userName(taggedIdentity),
+        email: taggedIdentity.email,
         bmidNumber: taggedIdentity.bmidNumber ?? null,
         verified: Boolean(taggedIdentity.verified),
       },

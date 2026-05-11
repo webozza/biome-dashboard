@@ -31,7 +31,10 @@ export function generateOtp(): string {
   return num.toString().padStart(6, "0");
 }
 
-export async function recordOtp(email: string, otp: string): Promise<{ ok: true } | { ok: false; reason: "rate_limited" }> {
+export async function recordOtp(
+  email: string,
+  otp: string
+): Promise<{ ok: true } | { ok: false; reason: "rate_limited"; retryAfterSeconds: number }> {
   const normalized = normalizeEmail(email);
   const ref = db().collection(COLLECTION).doc(normalized);
   const snap = await ref.get();
@@ -46,7 +49,13 @@ export async function recordOtp(email: string, otp: string): Promise<{ ok: true 
   });
 
   if (recent.length >= RATE_LIMIT_MAX_REQUESTS) {
-    return { ok: false, reason: "rate_limited" };
+    const oldest = Math.min(...recent.map((iso) => Date.parse(iso)).filter(Number.isFinite));
+    const retryAfterMs = Math.max(0, oldest + RATE_LIMIT_WINDOW_MS - now.getTime());
+    return {
+      ok: false,
+      reason: "rate_limited",
+      retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)),
+    };
   }
 
   const expiresAt = new Date(now.getTime() + OTP_TTL_MINUTES * 60 * 1000).toISOString();
@@ -90,6 +99,11 @@ export async function verifyOtp(email: string, otp: string): Promise<VerifyOtpRe
 export async function markOtpUsed(email: string): Promise<void> {
   const normalized = normalizeEmail(email);
   await db().collection(COLLECTION).doc(normalized).update({ used: true, usedAt: new Date().toISOString() });
+}
+
+export async function clearPasswordReset(email: string): Promise<void> {
+  const normalized = normalizeEmail(email);
+  await db().collection(COLLECTION).doc(normalized).delete();
 }
 
 export const PASSWORD_RESET_CONFIG = {

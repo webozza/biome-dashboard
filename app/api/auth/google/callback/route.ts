@@ -12,7 +12,7 @@ function redirectTo(url: string, status: "connected" | "error", detail?: string)
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const base = `${url.protocol}//${url.host}`;
+  const base = (process.env.PUBLIC_BASE_URL || `${url.protocol}//${url.host}`).replace(/\/+$/, "");
   const code = url.searchParams.get("code");
   const errParam = url.searchParams.get("error");
 

@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const login = useAuthStore((s) => s.login);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const initialized = useAuthStore((s) => s.initialized);
@@ -17,6 +18,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const resetSuccess = searchParams.get("reset") === "success";
 
   useEffect(() => {
     if (initialized && isAuthenticated) {
@@ -66,6 +69,12 @@ export default function LoginPage() {
 
         <div className="bg-white border border-neutral-200 rounded-2xl p-8 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-5">
+            {resetSuccess && (
+              <div className="text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                Password reset successful. Please sign in with your new password.
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-2">
                 Email
@@ -110,6 +119,16 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
+
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => router.push("/reset-password")}
+                className="text-xs font-semibold text-neutral-600 hover:text-emerald-700"
+              >
+                Forgot password?
+              </button>
+            </div>
 
             <button
               type="submit"

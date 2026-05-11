@@ -15,6 +15,14 @@ import {
 } from "./templates";
 import { loadConnection, sendGmail } from "./gmail-oauth";
 
+export type EmailSendResult = {
+  ok: boolean;
+  transport: "gmail" | "none";
+  error?: string;
+  code?: string;
+  fromEmail?: string;
+};
+
 function brandConfig(overrideSupportEmail?: string | null): BrandConfig {
   const appUrl = (process.env.PUBLIC_BASE_URL || "https://app.biome-aura.com/").trim();
   const fallback = (process.env.SMTP_REPLY_TO || process.env.SMTP_FROM_EMAIL || "").trim();
@@ -45,8 +53,8 @@ async function sendRendered(
   to: string,
   rendered: { subject: string; html: string; text: string },
   logTag: string
-): Promise<void> {
-  if (!to) return;
+): Promise<EmailSendResult> {
+  if (!to) return { ok: false, transport: "none", error: "Missing recipient" };
 
   const gmailConn = await loadConnection().catch(() => null);
   const brand = brandConfig(gmailConn?.email);
@@ -64,7 +72,7 @@ async function sendRendered(
       });
       if (result.ok) {
         console.log(`[email] sent via Gmail OAuth (${gmailConn.email}) to ${to} [${logTag}]`);
-        return;
+        return { ok: true, transport: "gmail", fromEmail: gmailConn.email };
       }
       console.error("[email] Gmail connected but sendGmail returned false", {
         to,
@@ -72,15 +80,24 @@ async function sendRendered(
         error: result.error,
         code: result.code,
       });
+      return {
+        ok: false,
+        transport: "gmail",
+        error: result.error,
+        code: result.code,
+        fromEmail: gmailConn.email,
+      };
     } catch (e) {
       console.error("[email] Gmail send failed", {
         to,
         logTag,
         error: (e as Error).message,
       });
+      return { ok: false, transport: "gmail", error: (e as Error).message, fromEmail: gmailConn.email };
     }
   } else {
     console.warn("[email] no Gmail OAuth configured, mail dropped", { to, logTag });
+    return { ok: false, transport: "none", error: "No Gmail OAuth configured" };
   }
 }
 
@@ -131,12 +148,12 @@ export async function sendBoxFinalizedEmail(
 export async function sendPasswordResetOtpEmail(
   to: string,
   ctx: PasswordResetOtpContext
-): Promise<void> {
-  if (!to) return;
+): Promise<EmailSendResult> {
+  if (!to) return { ok: false, transport: "none", error: "Missing recipient" };
   const gmailConn = await loadConnection().catch(() => null);
   const brand = brandConfig(gmailConn?.email);
   const rendered = renderPasswordResetOtpEmail(brand, ctx);
-  await sendRendered(to, rendered, "password-reset-otp");
+  return sendRendered(to, rendered, "password-reset-otp");
 }
 
 export async function sendRawEmail(opts: {

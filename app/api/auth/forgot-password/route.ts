@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { auth as adminAuth } from "@/lib/server/firebase";
 import { error, json } from "@/lib/server/response";
-import { generateOtp, recordOtp, PASSWORD_RESET_CONFIG } from "@/lib/server/password-reset";
+import { generateOtp, markOtpUsed, recordOtp, PASSWORD_RESET_CONFIG } from "@/lib/server/password-reset";
 import { sendPasswordResetOtpEmail } from "@/lib/server/email/transport";
 
 export const dynamic = "force-dynamic";
@@ -72,10 +72,23 @@ export async function POST(req: NextRequest) {
     return error("could_not_create_otp", 500);
   }
 
-  void sendPasswordResetOtpEmail(email, {
+  const sendResult = await sendPasswordResetOtpEmail(email, {
     otp,
     expiresInMinutes: PASSWORD_RESET_CONFIG.OTP_TTL_MINUTES,
   });
+
+  if (!sendResult.ok) {
+    await markOtpUsed(email).catch(() => undefined);
+    const detail =
+      sendResult.code === "api_disabled"
+        ? "Gmail API is disabled for this Google Cloud project. Enable gmail.googleapis.com and retry."
+        : sendResult.error || "Could not send OTP email.";
+    return error("otp_email_failed", 503, {
+      detail,
+      transport: sendResult.transport,
+      code: sendResult.code,
+    });
+  }
 
   if (debug) {
     return json({ ok: true, sent: true, debug: { email, expiresInMinutes: PASSWORD_RESET_CONFIG.OTP_TTL_MINUTES } });

@@ -4,6 +4,7 @@ import { create } from "zustand";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -30,6 +31,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<boolean>;
   loginWithGoogle: () => Promise<boolean>;
   logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<boolean>;
 }
 
 const API_TOKEN_STORAGE_KEY = "biome-admin-api-token";
@@ -132,6 +134,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     await signOut(auth);
     writeStoredApiToken(null);
     set({ isAuthenticated: false, user: null, apiToken: null });
+  },
+  resetPassword: async (email) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return true;
+    } catch {
+      return false;
+    }
   },
 }));
 

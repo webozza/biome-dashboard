@@ -218,15 +218,23 @@ export async function sendGmail(opts: {
   } catch (e) {
     console.error("[gmail] API call failed during send", e);
     const message = String((e as Error).message || "");
+    const lowerMessage = message.toLowerCase();
     const responseData = (e as { response?: { data?: unknown } }).response?.data;
+    const lowerResponse = JSON.stringify(responseData || "").toLowerCase();
     const scopeError =
-      message.toLowerCase().includes("insufficient authentication scopes") ||
-      JSON.stringify(responseData || "").toLowerCase().includes("insufficient authentication scopes");
+      lowerMessage.includes("insufficient authentication scopes") ||
+      lowerResponse.includes("insufficient authentication scopes");
+    const apiDisabled =
+      lowerMessage.includes("gmail api has not been used") ||
+      (lowerMessage.includes("gmail api") && lowerMessage.includes("disabled")) ||
+      lowerResponse.includes("service_disabled");
     return {
       ok: false,
-      code: scopeError ? "missing_scope" : "send_failed",
+      code: scopeError ? "missing_scope" : apiDisabled ? "api_disabled" : "send_failed",
       error: scopeError
         ? "Gmail token is missing the gmail.send scope. Disconnect and connect Gmail again."
+        : apiDisabled
+          ? "Gmail API is disabled for this Google Cloud project. Enable gmail.googleapis.com and retry."
         : message || "Gmail API send failed",
     };
   }

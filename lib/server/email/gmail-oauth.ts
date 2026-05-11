@@ -21,7 +21,7 @@ const SCOPES = [
 
 export type GmailSendResult =
   | { ok: true }
-  | { ok: false; code: "not_connected" | "missing_scope" | "send_failed"; error: string };
+  | { ok: false; code: "not_connected" | "missing_scope" | "api_disabled" | "send_failed"; error: string };
 
 export function getOAuthConfig() {
   const clientId = (process.env.GOOGLE_OAUTH_CLIENT_ID || "").trim();

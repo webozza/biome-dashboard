@@ -5,7 +5,7 @@ import { sendGmail, loadConnection } from "./gmail";
 
 admin.initializeApp();
 
-setGlobalOptions({ region: "us-central1" });
+setGlobalOptions({ region: "asia-southeast1" });
 
 const DASHBOARD_URL = (process.env.PUBLIC_BASE_URL || "https://dashboard.biome-aura.com").replace(/\/$/, "");
 

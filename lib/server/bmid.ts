@@ -100,7 +100,7 @@ export async function ensureVotingSession(content: ContentRequestDoc): Promise<V
   }
 
   await updateDoc("contentRequests", content.id, {
-    status: "in_review",
+    status: "approved",
     votingStatus: "open",
     votingOutcome: null,
     voteAccept: payload.accept,
@@ -133,7 +133,7 @@ export async function syncVotingToContent(voting: VotingItemDoc): Promise<void> 
       contentPatch.rejectionReason = "Community vote resulted in ignore";
     }
   } else if (voting.status === "open") {
-    contentPatch.status = "in_review";
+    contentPatch.status = "approved";
   }
 
   await updateDoc("contentRequests", voting.requestId, contentPatch);

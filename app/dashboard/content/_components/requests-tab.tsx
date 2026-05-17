@@ -1,6 +1,7 @@
 "use client";
 
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   FileText,
   CheckCircle,
@@ -32,6 +33,8 @@ const NEUTRAL_FIELD_CLASS =
 
 export function RequestsTab() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const appliedUrlFilters = useRef(false);
   const user = useAuthStore((s) => s.user);
   const apiToken = useAuthStore((s) => s.apiToken);
   const {
@@ -62,6 +65,15 @@ export function RequestsTab() {
   const [selectedUserOption, setSelectedUserOption] = useState<UserPickerOption | null>(null);
   const [taggedUserOption, setTaggedUserOption] = useState<UserPickerOption | null>(null);
   const deferredSearch = useDeferredValue(searchQuery);
+
+  useEffect(() => {
+    if (appliedUrlFilters.current) return;
+    const status = searchParams.get("status");
+    if (!status) return;
+    appliedUrlFilters.current = true;
+    clearFilters();
+    setFilter("status", status);
+  }, [clearFilters, searchParams, setFilter]);
 
   const userPostsQuery = useQuery({
     queryKey: ["users", "posts", selectedUserOption?.id],
@@ -108,7 +120,7 @@ export function RequestsTab() {
     );
   }, [deferredSearch, listQuery.data?.items]);
 
-  const allItems = listQuery.data?.items || [];
+  const allItems = useMemo(() => listQuery.data?.items || [], [listQuery.data?.items]);
   const stats = useMemo(() => {
     const totalAccept = allItems.reduce((s, v) => s + (v.voteAccept || 0), 0);
     const totalIgnore = allItems.reduce((s, v) => s + (v.voteIgnore || 0), 0);
@@ -362,7 +374,6 @@ export function RequestsTab() {
                 options: [
                   { value: "pending", label: "Pending" },
                   { value: "waiting_tagged", label: "Waiting Tagged" },
-                  { value: "in_review", label: "In Review" },
                   { value: "approved", label: "Approved" },
                   { value: "rejected", label: "Rejected" },
                   { value: "cancelled", label: "Cancelled" },

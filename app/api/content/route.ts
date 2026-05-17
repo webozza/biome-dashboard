@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
-import { buildList } from "@/lib/server/resource";
 import { guard } from "@/lib/server/guard";
 import { createDoc, getDoc } from "@/lib/server/firestore";
 import { buildDualityRequestFromContent } from "@/lib/server/bmid";
-import { error, json } from "@/lib/server/response";
+import { db } from "@/lib/server/firebase";
+import { error, json, parsePagination } from "@/lib/server/response";
 import { contentRequests } from "@/lib/data/mock-data";
 
 export const dynamic = "force-dynamic";
@@ -17,13 +17,77 @@ type UserDoc = {
   verified?: boolean;
 };
 
+type ContentListDoc = {
+  id: string;
+  createdAt?: unknown;
+  status?: unknown;
+  votingStatus?: unknown;
+  type?: unknown;
+  userId?: unknown;
+};
+
 function pickName(user: UserDoc, fallback: string) {
   return user.name || user.displayName || user.email || fallback;
 }
 
-export const GET = buildList("contentRequests", {
-  allowedFilters: ["status", "userId", "type"],
-});
+function normalizedParam(url: URL, key: string) {
+  const value = url.searchParams.get(key)?.trim();
+  return value ? value.toLowerCase() : null;
+}
+
+function normalizedValue(value: unknown) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function normalizedContentStatus(row: ContentListDoc) {
+  const status = normalizedValue(row.status);
+  const votingStatus = normalizedValue(row.votingStatus);
+  return status === "in_review" && votingStatus === "open" ? "approved" : status;
+}
+
+function normalizeContentRow<T extends ContentListDoc>(row: T): T {
+  return normalizedContentStatus(row) === "approved" ? { ...row, status: "approved" } : row;
+}
+
+function createdAtTime(value: unknown) {
+  if (typeof value !== "string") return 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+export async function GET(req: NextRequest) {
+  const g = guard(req);
+  if (g) return g;
+
+  const url = new URL(req.url);
+  const { limit, cursor } = parsePagination(url);
+  const status = normalizedParam(url, "status");
+  const type = normalizedParam(url, "type");
+  const userId = url.searchParams.get("userId")?.trim() || null;
+
+  try {
+    const snap = await db().collection("contentRequests").get();
+    const rows = snap.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() } as ContentListDoc))
+      .filter((row) => !status || normalizedContentStatus(row) === status)
+      .filter((row) => !type || normalizedValue(row.type) === type)
+      .filter((row) => !userId || row.userId === userId)
+      .sort((a, b) => {
+        const byDate = createdAtTime(b.createdAt) - createdAtTime(a.createdAt);
+        return byDate || b.id.localeCompare(a.id);
+      });
+
+    const start = cursor ? Math.max(rows.findIndex((row) => row.id === cursor) + 1, 0) : 0;
+    const page = rows.slice(start, start + limit);
+
+    return json({
+      items: page.map(normalizeContentRow),
+      nextCursor: start + limit < rows.length ? page[page.length - 1]?.id ?? null : null,
+    });
+  } catch (e) {
+    return error("list_failed", 500, { detail: String((e as Error).message) });
+  }
+}
 
 export async function POST(req: NextRequest) {
   const g = guard(req);

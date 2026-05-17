@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useState } from "react";
 import {
   Users,
   ShieldCheck,
@@ -53,6 +55,15 @@ type DashboardSummary = {
     approved: number;
     refused: number;
     removed: number;
+  };
+  content: {
+    total: number;
+    pending: number;
+    waitingTagged: number;
+    inReview: number;
+    approved: number;
+    rejected: number;
+    cancelled: number;
   };
   volume: { date: string; verification: number; content: number; box: number; duality: number }[];
   breakdown: { name: string; value: number; color: string }[];
@@ -114,6 +125,7 @@ function ChartTooltip({
 
 export default function DashboardPage() {
   const apiToken = useAuthStore((s) => s.apiToken);
+  const [summaryTab, setSummaryTab] = useState<"content" | "box">("content");
 
   const query = useQuery<DashboardSummary>({
     queryKey: ["dashboard", "summary"],
@@ -137,28 +149,85 @@ export default function DashboardPage() {
 
   const kpiCards = data
     ? [
-        { label: "Total Users", value: data.kpi.totalUsers, icon: Users, color: "#3b82f6" },
-        { label: "Verified BMID", value: data.kpi.verifiedUsers, icon: ShieldCheck, color: "#10b981" },
-        { label: "Pending Verify", value: data.kpi.pendingVerification, icon: Clock, color: "#f59e0b" },
-        { label: "Content Req", value: data.kpi.pendingContent, icon: FileText, color: "#8b5cf6" },
-        { label: "Box Req", value: data.kpi.pendingBox, icon: Box, color: "#06b6d4" },
-        { label: "Duality", value: data.kpi.pendingDuality, icon: GitBranch, color: "#f97316" },
-        { label: "Approved", value: data.kpi.approvedTotal, icon: CheckCircle, color: "#22c55e" },
-        { label: "Refused", value: data.kpi.refusedTotal, icon: XCircle, color: "#ef4444" },
+        { label: "Total Users", value: data.kpi.totalUsers, icon: Users, color: "#3b82f6", href: "/dashboard/users" },
+        { label: "Verified BMID", value: data.kpi.verifiedUsers, icon: ShieldCheck, color: "#10b981", href: "/dashboard/verification?status=approved" },
+        { label: "Pending Verify", value: data.kpi.pendingVerification, icon: Clock, color: "#f59e0b", href: "/dashboard/verification?status=pending" },
+        { label: "Content Req", value: data.kpi.pendingContent, icon: FileText, color: "#8b5cf6", href: "/dashboard/content?status=pending" },
+        { label: "Box Req", value: data.kpi.pendingBox, icon: Box, color: "#06b6d4", href: "/dashboard/bmid-box?status=pending" },
+        { label: "Duality", value: data.kpi.pendingDuality, icon: GitBranch, color: "#f97316", href: "/dashboard/duality" },
+        { label: "Approved", value: data.kpi.approvedTotal, icon: CheckCircle, color: "#22c55e", href: undefined },
+        { label: "Refused", value: data.kpi.refusedTotal, icon: XCircle, color: "#ef4444", href: undefined },
       ]
     : [];
 
   const pendingActions = data
     ? [
-        { label: "Pending verifications", count: data.pendingActions.verification, icon: ShieldCheck, color: "text-amber-500" },
-        { label: "Pending content reviews", count: data.pendingActions.contentOwn, icon: FileText, color: "text-blue-500" },
-        { label: "Waiting on tagged user", count: data.pendingActions.dualityWaitingTagged, icon: GitBranch, color: "text-orange-500" },
-        { label: "Voting sessions open", count: data.pendingActions.votingOpen, icon: Vote, color: "text-purple-500" },
-        { label: "Flagged items", count: data.pendingActions.flaggedOpen, icon: AlertTriangle, color: "text-red-500" },
+        { label: "Pending verifications", count: data.pendingActions.verification, icon: ShieldCheck, color: "text-amber-500", href: "/dashboard/verification?status=pending" },
+        { label: "Pending content reviews", count: data.pendingActions.contentOwn, icon: FileText, color: "text-blue-500", href: "/dashboard/content?status=pending" },
+        { label: "Waiting on tagged user", count: data.pendingActions.dualityWaitingTagged, icon: GitBranch, color: "text-orange-500", href: "/dashboard/duality" },
+        { label: "Voting sessions open", count: data.pendingActions.votingOpen, icon: Vote, color: "text-purple-500", href: "/dashboard/voting" },
+        { label: "Flagged items", count: data.pendingActions.flaggedOpen, icon: AlertTriangle, color: "text-red-500", href: "/dashboard/moderation" },
       ]
     : [];
 
   const pendingActionsTotal = pendingActions.reduce((s, a) => s + a.count, 0);
+  const activeSummary =
+    summaryTab === "content"
+      ? {
+          title: "BMID Content Summary",
+          subtitle: "Live content request counts from Firestore",
+          icon: FileText,
+          href: "/dashboard/content",
+          accent: "#8b5cf6",
+          total: data?.content.total ?? "—",
+          rows: data
+            ? ([
+                { label: "Total requests", value: data.content.total, href: "/dashboard/content" },
+                { label: "Pending review", value: data.content.pending, href: "/dashboard/content?status=pending" },
+                { label: "Waiting tagged", value: data.content.waitingTagged, href: "/dashboard/content?status=waiting_tagged" },
+                { label: "Approved", value: data.content.approved + data.content.inReview, href: "/dashboard/content?status=approved" },
+                { label: "Rejected", value: data.content.rejected, href: "/dashboard/content?status=rejected" },
+                { label: "Cancelled", value: data.content.cancelled, href: "/dashboard/content?status=cancelled" },
+              ] as const)
+            : Array.from({ length: 6 }).map(() => ({ label: "—", value: "—", href: "/dashboard/content" })),
+        }
+      : {
+          title: "BMID Box Summary",
+          subtitle: "Live box request queue counts from Firestore",
+          icon: Box,
+          href: "/dashboard/bmid-box",
+          accent: "#06b6d4",
+          total: data?.bmidBox.total ?? "—",
+          rows: data
+            ? ([
+                { label: "Total requests", value: data.bmidBox.total, href: "/dashboard/bmid-box" },
+                { label: "Admin review", value: data.bmidBox.pendingAdminReview, href: "/dashboard/bmid-box?status=pending_admin_review" },
+                { label: "Tagged user", value: data.bmidBox.pendingTaggedUser, href: "/dashboard/bmid-box?status=pending_tagged_user" },
+                { label: "Voting", value: data.bmidBox.pendingVoting, href: "/dashboard/bmid-box?status=pending_voting" },
+                { label: "Approved", value: data.bmidBox.approved, href: "/dashboard/bmid-box?status=approved" },
+                { label: "Refused", value: data.bmidBox.refused, href: "/dashboard/bmid-box?status=refused" },
+                { label: "Removed", value: data.bmidBox.removed, href: "/dashboard/bmid-box?status=removed" },
+              ] as const)
+            : Array.from({ length: 7 }).map(() => ({ label: "—", value: "—", href: "/dashboard/bmid-box" })),
+        };
+  const summaryTabs = [
+    {
+      key: "content" as const,
+      label: "Content",
+      icon: FileText,
+      total: data?.content.total ?? "—",
+      pending: data?.content.pending ?? "—",
+      color: "#8b5cf6",
+    },
+    {
+      key: "box" as const,
+      label: "Box",
+      icon: Box,
+      total: data?.bmidBox.total ?? "—",
+      pending: data?.kpi.pendingBox ?? "—",
+      color: "#06b6d4",
+    },
+  ];
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -204,38 +273,73 @@ export default function DashboardPage() {
                 value={card.value}
                 icon={card.icon}
                 color={card.color}
+                href={card.href}
               />
             ))}
       </div>
 
-      {/* BMID Box Summary */}
-      <div className="card p-6">
-        <div className="flex items-center justify-between gap-4">
+      {/* BMID Summary */}
+      <div className="rounded-2xl border border-border bg-surface">
+        <div className="flex flex-col gap-4 border-b border-border p-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <h3 className="font-extrabold tracking-tight text-main">BMID Box Summary</h3>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
-              Live queue counts from Firestore
-            </p>
+            <h3 className="font-extrabold tracking-tight text-main">{activeSummary.title}</h3>
+            <p className="mt-1 text-xs font-medium text-muted">{activeSummary.subtitle}</p>
           </div>
-          <Box className="h-5 w-5 text-primary" />
-        </div>
-        <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-7">
-          {(data
-            ? ([
-                ["Total Box requests", data.bmidBox.total],
-                ["Pending admin review", data.bmidBox.pendingAdminReview],
-                ["Pending tagged user", data.bmidBox.pendingTaggedUser],
-                ["Pending voting", data.bmidBox.pendingVoting],
-                ["Approved", data.bmidBox.approved],
-                ["Refused", data.bmidBox.refused],
-                ["Removed", data.bmidBox.removed],
-              ] as const)
-            : Array.from({ length: 7 }).map(() => ["", "—"] as const)
-          ).map(([label, value], idx) => (
-            <div key={String(label) || idx} className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.15em] text-muted">{label || "—"}</p>
-              <p className="mt-3 text-3xl font-extrabold tracking-tight text-main">{value}</p>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="inline-grid grid-cols-2 rounded-xl border border-border bg-background p-1">
+              {summaryTabs.map((tab) => {
+                const Icon = tab.icon;
+                const active = summaryTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setSummaryTab(tab.key)}
+                    className={`flex min-w-[150px] items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition ${
+                      active
+                        ? "bg-surface-hover text-main ring-1 ring-border"
+                        : "text-muted hover:bg-surface hover:text-main"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Icon className="h-4 w-4" />
+                      <span className="text-xs font-black uppercase tracking-[0.14em]">{tab.label}</span>
+                    </span>
+                    <span className="text-sm font-black tabular-nums">{tab.total}</span>
+                  </button>
+                );
+              })}
             </div>
+            <Link
+              href={activeSummary.href}
+              className="inline-flex h-[42px] items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-[10px] font-black uppercase tracking-[0.18em] text-muted transition hover:text-main"
+            >
+              View all
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid gap-px bg-border md:grid-cols-2 xl:grid-cols-3">
+          {activeSummary.rows.map((row, idx) => (
+            <Link
+              key={`${row.label}-${idx}`}
+              href={row.href}
+              className="group flex min-h-[86px] items-center justify-between gap-4 bg-surface p-4 transition hover:bg-surface-hover"
+            >
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">{row.label}</p>
+                <p className="mt-1 text-[10px] font-medium text-muted">
+                  {idx === 0 ? "All records" : "Filtered view"}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <p className="text-2xl font-extrabold tracking-tight text-main tabular-nums">{row.value}</p>
+                <ArrowUpRight className="h-4 w-4 text-muted opacity-50 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+              </div>
+            </Link>
           ))}
         </div>
       </div>
@@ -379,8 +483,9 @@ export default function DashboardPage() {
               : pendingActions.map((action) => {
                   const Icon = action.icon;
                   return (
-                    <div
+                    <Link
                       key={action.label}
+                      href={action.href}
                       className="group flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all bg-surface hover:bg-surface-hover border border-border hover:border-primary/30 shadow-sm"
                     >
                       <div className="flex items-center gap-3">
@@ -393,7 +498,7 @@ export default function DashboardPage() {
                         <span className="text-sm font-black text-main">{action.count}</span>
                         <ArrowUpRight className="w-4 h-4 text-muted group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                       </div>
-                    </div>
+                    </Link>
                   );
                 })}
           </div>
@@ -414,8 +519,9 @@ export default function DashboardPage() {
               ))
             ) : data && data.activity.length > 0 ? (
               data.activity.map((activity) => (
-                <div
+                <Link
                   key={activity.id}
+                  href="/dashboard/audit"
                   className="flex items-start gap-5 p-4 rounded-xl transition-all cursor-pointer hover:bg-surface-hover group border border-transparent hover:border-border"
                 >
                   <div className={`w-3 h-3 rounded-full mt-1.5 shrink-0 ring-4 ring-background ${activityDotColor[activity.type] || "bg-muted opacity-50"}`} />
@@ -435,7 +541,7 @@ export default function DashboardPage() {
                       <span className="text-[10px] font-black text-primary uppercase tracking-tighter">{activity.user}</span>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))
             ) : (
               <p className="text-sm text-muted italic">No recent activity.</p>
@@ -486,7 +592,13 @@ export default function DashboardPage() {
                 ))
               ) : data && data.flagged.length > 0 ? (
                 data.flagged.map((item) => (
-                  <tr key={item.id} className="group hover:bg-surface-hover/50 transition-colors cursor-pointer">
+                  <tr
+                    key={item.id}
+                    onClick={() => {
+                      window.location.href = "/dashboard/moderation";
+                    }}
+                    className="group hover:bg-surface-hover/50 transition-colors cursor-pointer"
+                  >
                     <td className="px-6 py-4.5">
                       <span className="text-[10px] font-black text-main uppercase bg-surface-hover px-2.5 py-1 rounded-md border border-border group-hover:border-primary/20">
                         {item.type}

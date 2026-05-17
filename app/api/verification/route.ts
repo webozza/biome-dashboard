@@ -1,16 +1,69 @@
 import { NextRequest } from "next/server";
-import { buildList } from "@/lib/server/resource";
 import { requireAdmin, requireFirebaseUser } from "@/lib/server/auth";
 import { db } from "@/lib/server/firebase";
 import { createDoc } from "@/lib/server/firestore";
-import { error, json } from "@/lib/server/response";
+import { guard } from "@/lib/server/guard";
+import { error, json, parsePagination } from "@/lib/server/response";
 import { ensureReservedBmidAssignmentsSynced } from "@/lib/server/bmid-number";
 
 export const dynamic = "force-dynamic";
 
-const listVerificationRequests = buildList("verificationRequests", {
-  allowedFilters: ["status", "platform", "userId"],
-});
+type VerificationListDoc = {
+  id: string;
+  createdAt?: unknown;
+  status?: unknown;
+  platform?: unknown;
+  userId?: unknown;
+};
+
+function normalizedParam(url: URL, key: string) {
+  const value = url.searchParams.get(key)?.trim();
+  return value ? value.toLowerCase() : null;
+}
+
+function normalizedValue(value: unknown) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function createdAtTime(value: unknown) {
+  if (typeof value !== "string") return 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+async function listVerificationRequests(req: NextRequest) {
+  const g = guard(req);
+  if (g) return g;
+
+  const url = new URL(req.url);
+  const { limit, cursor } = parsePagination(url);
+  const status = normalizedParam(url, "status");
+  const platform = normalizedParam(url, "platform");
+  const userId = url.searchParams.get("userId")?.trim() || null;
+
+  try {
+    const snap = await db().collection("verificationRequests").get();
+    const rows = snap.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() } as VerificationListDoc))
+      .filter((row) => !status || normalizedValue(row.status) === status)
+      .filter((row) => !platform || normalizedValue(row.platform) === platform)
+      .filter((row) => !userId || row.userId === userId)
+      .sort((a, b) => {
+        const byDate = createdAtTime(b.createdAt) - createdAtTime(a.createdAt);
+        return byDate || b.id.localeCompare(a.id);
+      });
+
+    const start = cursor ? Math.max(rows.findIndex((row) => row.id === cursor) + 1, 0) : 0;
+    const page = rows.slice(start, start + limit);
+
+    return json({
+      items: page,
+      nextCursor: start + limit < rows.length ? page[page.length - 1]?.id ?? null : null,
+    });
+  } catch (e) {
+    return error("list_failed", 500, { detail: String((e as Error).message) });
+  }
+}
 
 export async function GET(req: NextRequest) {
   await ensureReservedBmidAssignmentsSynced();

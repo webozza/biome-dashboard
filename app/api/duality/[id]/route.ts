@@ -77,7 +77,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       const content = await getDoc<ContentRequestDoc>("contentRequests", id);
       if (content) {
         await updateDoc("contentRequests", id, {
-          status: "in_review",
+          status: "approved",
           taggedUserAction: "accepted",
           reviewedBy: body.reviewedBy ?? content.reviewedBy ?? null,
           votingStatus: "open",

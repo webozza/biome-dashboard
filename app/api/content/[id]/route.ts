@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { buildDelete, buildGetOne } from "@/lib/server/resource";
+import { buildDelete } from "@/lib/server/resource";
 import { guard } from "@/lib/server/guard";
 import { getDoc, updateDoc } from "@/lib/server/firestore";
 import type { ContentRequestDoc, DualityRequestDoc } from "@/lib/server/bmid";
@@ -18,8 +18,27 @@ type UserEmailDoc = { email?: string | null; name?: string | null; displayName?:
 
 export const dynamic = "force-dynamic";
 
-export const GET = buildGetOne("contentRequests");
 export const DELETE = buildDelete("contentRequests");
+
+function normalizeContentStatus<T extends Record<string, unknown>>(content: T): T {
+  return content.status === "in_review" && content.votingStatus === "open"
+    ? { ...content, status: "approved" }
+    : content;
+}
+
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const g = guard(req);
+  if (g) return g;
+
+  const { id } = await ctx.params;
+  try {
+    const item = await getDoc<Record<string, unknown>>("contentRequests", id);
+    if (!item) return error("not_found", 404);
+    return json(normalizeContentStatus(item));
+  } catch (e) {
+    return error("get_failed", 500, { detail: String((e as Error).message) });
+  }
+}
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const g = guard(req);
@@ -71,7 +90,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     try {
       await updateDoc("contentRequests", id, {
         ...body,
-        status: "in_review",
+        status: "approved",
         votingStatus: "open",
         votingOutcome: null,
       });

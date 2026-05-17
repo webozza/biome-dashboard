@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React from "react";
 import { Loader2, TrendingUp, TrendingDown } from "lucide-react";
 
@@ -14,6 +15,7 @@ interface MetricCardProps {
   };
   color?: string;
   loading?: boolean;
+  href?: string;
 }
 
 export function MetricCard({
@@ -24,9 +26,10 @@ export function MetricCard({
   trend,
   color = "var(--primary)",
   loading = false,
+  href,
 }: MetricCardProps) {
-  return (
-    <div className="card group relative overflow-hidden flex flex-col gap-5">
+  const content = (
+    <div className={`card group relative overflow-hidden flex flex-col gap-5 ${href ? "cursor-pointer transition-transform hover:-translate-y-0.5" : ""}`}>
       {/* Background Synthesis Glow */}
       <div
         className="absolute -right-8 -top-8 w-32 h-32 rounded-full blur-[60px] opacity-10 transition-opacity group-hover:opacity-20"
@@ -72,4 +75,14 @@ export function MetricCard({
       </div>
     </div>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="block h-full">
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }

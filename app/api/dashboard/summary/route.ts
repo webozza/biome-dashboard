@@ -238,6 +238,16 @@ export async function GET(req: NextRequest) {
       removed: boxes.filter((b) => b.currentStatus === "removed").length,
     };
 
+    const content = {
+      total: contents.length,
+      pending: contents.filter((c) => c.status === "pending").length,
+      waitingTagged: contents.filter((c) => c.status === "waiting_tagged").length,
+      inReview: contents.filter((c) => c.status === "in_review").length,
+      approved: contents.filter((c) => c.status === "approved").length,
+      rejected: contents.filter((c) => c.status === "rejected").length,
+      cancelled: contents.filter((c) => c.status === "cancelled").length,
+    };
+
     const pendingActions = {
       verification: pendingVerification,
       contentOwn: pendingContent,
@@ -257,6 +267,7 @@ export async function GET(req: NextRequest) {
         approvedTotal,
         refusedTotal,
       },
+      content,
       bmidBox,
       volume: Array.from(volumeByKey.values()),
       breakdown,

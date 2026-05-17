@@ -1,6 +1,7 @@
 "use client";
 
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   BadgeCheck,
   CheckCircle,
@@ -27,7 +28,6 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 import { readJson } from "@/lib/http";
 import { formatDate } from "@/lib/format";
 import { AuthGate } from "@/components/ui/auth-gate";
-import { triggerAdminNotification } from "@/lib/notifications-client";
 
 type VerificationListResponse = {
   
@@ -207,6 +207,8 @@ function exportRows(rows: VerificationRequest[]) {
 
 export default function VerificationPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const appliedUrlFilters = useRef(false);
   const user = useAuthStore((s) => s.user);
   const apiToken = useAuthStore((s) => s.apiToken);
   const {
@@ -234,6 +236,15 @@ export default function VerificationPage() {
   const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
   const [selectedUserOption, setSelectedUserOption] = useState<UserPickerOption | null>(null);
   const deferredSearchQuery = useDeferredValue(searchQuery);
+
+  useEffect(() => {
+    if (appliedUrlFilters.current) return;
+    const status = searchParams.get("status");
+    if (!status) return;
+    appliedUrlFilters.current = true;
+    clearFilters();
+    setFilter("status", status);
+  }, [clearFilters, searchParams, setFilter]);
 
   const statusFilter = activeFilters.status && activeFilters.status !== "all" ? activeFilters.status : undefined;
   const platformFilter = activeFilters.platform && activeFilters.platform !== "all"

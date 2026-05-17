@@ -147,7 +147,6 @@ export function AuditTab() {
             options: [
               { value: "pending", label: "Pending" },
               { value: "waiting_tagged", label: "Waiting Tagged" },
-              { value: "in_review", label: "In Review" },
               { value: "approved", label: "Approved" },
               { value: "rejected", label: "Rejected" },
               { value: "cancelled", label: "Cancelled" },

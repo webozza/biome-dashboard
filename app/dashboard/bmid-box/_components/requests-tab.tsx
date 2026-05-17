@@ -1,14 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useDeferredValue, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { ExternalLink, Loader2, Plus, X } from "lucide-react";
+import {
+  ExternalLink,
+  Filter,
+  Loader2,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { BmidBoxPlatform, BmidBoxRequest, BmidBoxRequestType } from "@/lib/data/bmid-box";
-import { DataTable } from "@/components/ui/data-table";
-import { MetricCard } from "@/components/ui/metric-card";
-import { SearchFilterBar } from "@/components/ui/search-filter-bar";
+import type { BmidBoxPlatform, BmidBoxRequestType } from "@/lib/data/bmid-box";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { UserPicker, type UserPickerOption } from "@/components/ui/user-picker";
 import { useAuthStore } from "@/lib/stores/auth-store";
@@ -27,6 +33,39 @@ const platformTone: Record<string, string> = {
   youtube: "bg-red-500/10 text-red-400 border-red-500/20",
   facebook: "bg-blue-500/10 text-blue-400 border-blue-500/20",
 };
+
+const statusOptions = [
+  { value: "pending", label: "Pending" },
+  { value: "submitted", label: "Submitted" },
+  { value: "pending_admin_review", label: "Admin" },
+  { value: "pending_tagged_user", label: "Tagged" },
+  { value: "pending_voting", label: "Voting" },
+  { value: "approved", label: "Approved" },
+  { value: "refused", label: "Refused" },
+  { value: "removed", label: "Removed" },
+];
+
+const boardColumns = [
+  { value: "submitted", label: "Submitted", tone: "border-cyan-500/20 bg-cyan-500/[0.03]" },
+  { value: "pending_admin_review", label: "Admin Review", tone: "border-amber-500/20 bg-amber-500/[0.03]" },
+  { value: "pending_tagged_user", label: "Tagged User", tone: "border-sky-500/20 bg-sky-500/[0.03]" },
+  { value: "pending_voting", label: "Voting", tone: "border-violet-500/20 bg-violet-500/[0.03]" },
+  { value: "approved", label: "Approved", tone: "border-green-500/20 bg-green-500/[0.03]" },
+  { value: "refused", label: "Refused", tone: "border-red-500/20 bg-red-500/[0.03]" },
+  { value: "removed", label: "Removed", tone: "border-zinc-500/20 bg-zinc-500/[0.03]" },
+];
+
+const typeOptions = [
+  { value: "own", label: "Own" },
+  { value: "duality", label: "Duality" },
+];
+
+const platformOptions = [
+  { value: "instagram", label: "Instagram" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "youtube", label: "YouTube" },
+  { value: "facebook", label: "Facebook" },
+];
 
 type CreateFormState = {
   owner: UserPickerOption | null;
@@ -55,18 +94,18 @@ const emptyForm: CreateFormState = {
 };
 
 export function RequestsTab() {
+  const searchParams = useSearchParams();
+  const initialStatus = searchParams.get("status");
   const apiToken = useAuthStore((state) => state.apiToken);
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const [filters, setFilters] = useState<Record<string, string>>({});
-  const [currentPage, setCurrentPage] = useState(1);
+  const [filters, setFilters] = useState<Record<string, string>>(initialStatus ? { status: initialStatus } : {});
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<CreateFormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deferredSearch = useDeferredValue(searchQuery);
-  const pageSize = 10;
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -153,7 +192,9 @@ export function RequestsTab() {
 
       if (q && !searchHaystack.includes(q)) return false;
       if (filters.status && filters.status !== "all") {
-        if (request.currentStatus !== filters.status) return false;
+        if (filters.status === "pending") {
+          if (!["submitted", "pending_admin_review", "pending_tagged_user", "pending_voting"].includes(request.currentStatus)) return false;
+        } else if (request.currentStatus !== filters.status) return false;
       } else if (request.currentStatus === "removed") {
         return false;
       }
@@ -164,104 +205,100 @@ export function RequestsTab() {
     });
   }, [deferredSearch, filters, listQuery.data?.items]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const rows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const summary = listQuery.data?.summary;
+  const visibleColumns = useMemo(
+    () =>
+      filters.status && filters.status !== "all" && filters.status !== "pending"
+        ? boardColumns.filter((column) => column.value === filters.status)
+        : boardColumns.filter((column) => filters.status === "removed" || column.value !== "removed"),
+    [filters.status]
+  );
+  const grouped = useMemo(
+    () =>
+      visibleColumns.map((column) => ({
+        ...column,
+        items: filtered.filter((request) => request.currentStatus === column.value),
+      })),
+    [filtered, visibleColumns]
+  );
 
   const cards = [
-    { title: "Total", value: summary?.total || 0, color: "#10b981" },
-    { title: "Admin Review", value: summary?.pendingAdminReview || 0, color: "#f59e0b" },
-    { title: "Tagged User", value: summary?.pendingTaggedUser || 0, color: "#3b82f6" },
-    { title: "Voting", value: summary?.pendingVoting || 0, color: "#8b5cf6" },
-    { title: "Approved", value: summary?.approved || 0, color: "#22c55e" },
-    { title: "Refused", value: summary?.refused || 0, color: "#ef4444" },
-    { title: "Removed", value: summary?.removed || 0, color: "#6b7280" },
+    { title: "Total", value: summary?.total || 0, tone: "border-emerald-500/20 bg-emerald-500/5 text-emerald-500" },
+    { title: "Admin", value: summary?.pendingAdminReview || 0, tone: "border-amber-500/20 bg-amber-500/5 text-amber-500" },
+    { title: "Tagged", value: summary?.pendingTaggedUser || 0, tone: "border-sky-500/20 bg-sky-500/5 text-sky-500" },
+    { title: "Voting", value: summary?.pendingVoting || 0, tone: "border-violet-500/20 bg-violet-500/5 text-violet-500" },
+    { title: "Approved", value: summary?.approved || 0, tone: "border-green-500/20 bg-green-500/5 text-green-500" },
+    { title: "Refused", value: summary?.refused || 0, tone: "border-red-500/20 bg-red-500/5 text-red-500" },
+    { title: "Removed", value: summary?.removed || 0, tone: "border-zinc-500/20 bg-zinc-500/5 text-zinc-500" },
   ];
 
-  const columns = [
-    {
-      key: "id",
-      label: "Request",
-      render: (request: BmidBoxRequest & { id: string }) => (
-        <Link href={`/dashboard/bmid-box/requests/${request.id}`} className="font-mono text-[10px] text-primary font-bold">
-          {request.id}
-        </Link>
-      ),
-    },
-    {
-      key: "owner",
-      label: "Owner",
-      render: (request: BmidBoxRequest & { id: string }) => (
-        <div>
-          <p className="font-bold text-main">{request.ownerSnapshot?.name || "Unknown"}</p>
-          <p className="text-[10px] text-muted font-bold uppercase tracking-widest">
-            {request.ownerSnapshot?.bmidNumber || "No BMID"}
-          </p>
-        </div>
-      ),
-    },
-    {
-      key: "tagged",
-      label: "Tagged",
-      render: (request: BmidBoxRequest & { id: string }) => (
-        <div>
-          <p className="font-bold text-main">{request.taggedSnapshot?.name || "Same as owner"}</p>
-          <p className="text-[10px] text-muted font-bold uppercase tracking-widest">
-            {request.type === "own" ? "Own" : request.taggedSnapshot?.bmidNumber || "Unverified"}
-          </p>
-        </div>
-      ),
-    },
-    {
-      key: "type",
-      label: "Type",
-      render: (request: BmidBoxRequest & { id: string }) => <StatusBadge status={request.type} size="xs" />,
-    },
-    {
-      key: "platform",
-      label: "Platform",
-      render: (request: BmidBoxRequest & { id: string }) => (
-        <span className={`inline-flex rounded-lg border px-2 py-1 text-[10px] font-black uppercase tracking-widest ${platformTone[request.sourcePlatform]}`}>
-          {request.sourcePlatform}
-        </span>
-      ),
-    },
-    {
-      key: "url",
-      label: "Link",
-      render: (request: BmidBoxRequest & { id: string }) => (
-        <a href={request.sourceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-primary text-sm font-medium">
-          <span className="truncate max-w-[220px]">{request.sourceUrl}</span>
-          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-        </a>
-      ),
-    },
-    {
-      key: "status",
-      label: "Status",
-      render: (request: BmidBoxRequest & { id: string }) => <StatusBadge status={request.currentStatus} />,
-    },
-    {
-      key: "votes",
-      label: "Votes",
-      render: (request: BmidBoxRequest & { id: string }) => (
-        <div className="flex gap-2 text-[10px] font-black uppercase tracking-wider">
-          <span className="text-emerald-400">{request.acceptCount} A</span>
-          <span className="text-amber-400">{request.ignoreCount} I</span>
-          <span className="text-red-400">{request.refuseCount} R</span>
-        </div>
-      ),
-    },
-    {
-      key: "createdAt",
-      label: "Created",
-      render: (request: BmidBoxRequest & { id: string }) => <span className="text-xs text-muted">{formatDate(request.createdAt)}</span>,
-    },
-  ];
+  const activeFilterCount = Object.values(filters).filter((value) => value && value !== "all").length;
+
+  function setFilterValue(key: string, value: string) {
+    setFilters((current) => {
+      const next = { ...current };
+      if (value === "all") delete next[key];
+      else next[key] = value;
+      return next;
+    });
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  }
+
+  function chipGroup(
+    key: string,
+    options: { value: string; label: string }[]
+  ) {
+    const active = filters[key] || "all";
+    return (
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        <button
+          type="button"
+          onClick={() => setFilterValue(key, "all")}
+          className={`shrink-0 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition ${
+            active === "all"
+              ? "border-primary/30 bg-primary/10 text-primary"
+              : "border-border bg-surface text-muted hover:text-main"
+          }`}
+        >
+          All
+        </button>
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => setFilterValue(key, option.value)}
+            className={`shrink-0 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition ${
+              active === option.value
+                ? "border-primary/30 bg-primary/10 text-primary"
+                : "border-border bg-surface text-muted hover:text-main"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-3">
+          <Filter className="h-4 w-4 text-primary" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">
+            {filtered.length} visible
+          </span>
+          {activeFilterCount > 0 ? (
+            <span className="rounded-lg bg-primary/10 px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-primary">
+              {activeFilterCount} active
+            </span>
+          ) : null}
+        </div>
         <button
           onClick={() => {
             setForm(emptyForm);
@@ -275,105 +312,195 @@ export function RequestsTab() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-7">
         {cards.map((card) => (
-          <MetricCard
+          <div
             key={card.title}
-            title={card.title}
-            value={card.value}
-            icon={Box}
-            color={card.color}
-            trend={{ value: listQuery.isFetching ? "SYNC" : "LIVE", isUp: true }}
-            loading={listQuery.isLoading}
-          />
+            className={`rounded-2xl border px-4 py-3 ${card.tone}`}
+          >
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{card.title}</p>
+            <div className="mt-2 flex items-end justify-between gap-2">
+              <span className="text-2xl font-black tracking-tight text-main">{card.value}</span>
+              <Box className="h-4 w-4 opacity-60" />
+            </div>
+          </div>
         ))}
       </div>
 
-      <div className="card p-6">
-        <SearchFilterBar
-          searchQuery={searchQuery}
-          onSearchChange={(value) => {
-            setSearchQuery(value);
-            setCurrentPage(1);
-          }}
-          searchPlaceholder="Search request, owner, tagged user, or URL..."
-          filters={[
-            {
-              key: "status",
-              label: "Status",
-              options: [
-                { value: "submitted", label: "Submitted" },
-                { value: "pending_admin_review", label: "Admin Review" },
-                { value: "pending_tagged_user", label: "Tagged User" },
-                { value: "pending_voting", label: "Voting" },
-                { value: "approved", label: "Approved" },
-                { value: "refused", label: "Refused" },
-                { value: "removed", label: "Removed" },
-              ],
-            },
-            {
-              key: "type",
-              label: "Type",
-              options: [
-                { value: "own", label: "Own" },
-                { value: "duality", label: "Duality" },
-              ],
-            },
-            {
-              key: "platform",
-              label: "Platform",
-              options: [
-                { value: "instagram", label: "Instagram" },
-                { value: "tiktok", label: "TikTok" },
-                { value: "youtube", label: "YouTube" },
-                { value: "facebook", label: "Facebook" },
-              ],
-            },
-            {
-              key: "ownerVerified",
-              label: "Verified",
-              options: [
-                { value: "verified", label: "Verified Only" },
-                { value: "all", label: "All" },
-              ],
-            },
-          ]}
-          activeFilters={filters}
-          onFilterChange={(key, value) => {
-            setFilters((current) => ({ ...current, [key]: value }));
-            setCurrentPage(1);
-          }}
-          onClearFilters={() => {
-            setFilters({});
-            setCurrentPage(1);
-          }}
-          selectedCount={selectedIds.length}
-          onBulkDelete={() => setConfirmDelete(true)}
-        />
+      <section className="rounded-2xl border border-border bg-surface">
+        <div className="space-y-4 border-b border-border p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="relative min-w-[260px] flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search request, owner, tagged user, or URL"
+                className="w-full rounded-xl border border-border bg-background py-3 pl-10 pr-3 text-sm font-bold text-main outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setFilters({});
+                  setSearchQuery("");
+                }}
+                className="rounded-xl border border-border bg-background px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-muted hover:text-main"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                disabled={selectedIds.length === 0}
+                className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-red-500 disabled:opacity-40"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {selectedIds.length}
+              </button>
+            </div>
+          </div>
 
-        <DataTable
-          columns={columns}
-          data={rows}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={filtered.length}
-          onPageChange={setCurrentPage}
-          getId={(request) => request.id}
-          selectedItems={selectedIds}
-          onToggleItem={(id) =>
-            setSelectedIds((current) =>
-              current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
-            )
-          }
-          onSelectAll={(ids) => setSelectedIds(ids)}
-          onRowClick={(request) => {
-            window.location.href = `/dashboard/bmid-box/requests/${request.id}`;
-          }}
-          emptyMessage="No Box requests found"
-          emptyDescription="Try a different filter"
-          loading={listQuery.isLoading}
-        />
-      </div>
+          <div className="space-y-3">
+            <div>
+              <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-muted">Status</p>
+              {chipGroup("status", statusOptions)}
+            </div>
+            <div className="grid gap-3 lg:grid-cols-3">
+              <div>
+                <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-muted">Type</p>
+                {chipGroup("type", typeOptions)}
+              </div>
+              <div>
+                <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-muted">Platform</p>
+                {chipGroup("platform", platformOptions)}
+              </div>
+              <div>
+                <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-muted">Owner</p>
+                {chipGroup("ownerVerified", [{ value: "verified", label: "Verified" }])}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {listQuery.isLoading ? (
+          <div className="grid gap-4 p-4 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="h-40 animate-pulse rounded-2xl bg-white/[0.04]" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex min-h-[360px] items-center justify-center p-8 text-center">
+            <div>
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-background">
+                <Box className="h-6 w-6 text-muted" />
+              </div>
+              <p className="mt-4 text-xs font-black uppercase tracking-[0.2em] text-main">No Box requests found</p>
+              <p className="mt-2 text-xs text-muted">Try clearing a filter.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto p-4">
+            <div className="grid min-w-[1120px] gap-4" style={{ gridTemplateColumns: `repeat(${grouped.length}, minmax(260px, 1fr))` }}>
+              {grouped.map((column) => (
+                <div key={column.value} className={`rounded-2xl border ${column.tone}`}>
+                  <div className="flex items-center justify-between border-b border-border px-3 py-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-main">{column.label}</p>
+                      <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.14em] text-muted">
+                        {column.items.length} request{column.items.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <StatusBadge status={column.value} size="xs" />
+                  </div>
+
+                  <div className="space-y-3 p-3">
+                    {column.items.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-border bg-background/50 px-3 py-8 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+                        Empty
+                      </div>
+                    ) : (
+                      column.items.map((request) => {
+                        const selected = selectedIds.includes(request.id);
+                        return (
+                          <article
+                            key={request.id}
+                            onClick={() => {
+                              window.location.href = `/dashboard/bmid-box/requests/${request.id}`;
+                            }}
+                            className={`cursor-pointer rounded-2xl border border-border bg-background p-3 transition hover:border-primary/30 ${
+                              selected ? "ring-2 ring-primary/20" : ""
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <Link
+                                  href={`/dashboard/bmid-box/requests/${request.id}`}
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="font-mono text-[10px] font-black text-primary"
+                                >
+                                  {request.id}
+                                </Link>
+                                <h3 className="mt-2 line-clamp-2 text-sm font-black leading-snug text-main">
+                                  {request.previewData.title || "Untitled Box request"}
+                                </h3>
+                              </div>
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={() => toggleSelected(request.id)}
+                                className="mt-0.5 h-4 w-4 shrink-0 rounded-md accent-primary"
+                              />
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                              <StatusBadge status={request.type} size="xs" />
+                              <span className={`inline-flex rounded-lg border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${platformTone[request.sourcePlatform]}`}>
+                                {request.sourcePlatform}
+                              </span>
+                            </div>
+
+                            <div className="mt-3 rounded-xl border border-border bg-surface px-3 py-2">
+                              <p className="truncate text-xs font-black text-main">{request.ownerSnapshot?.name || "Unknown"}</p>
+                              <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
+                                {request.ownerSnapshot?.bmidNumber || "No BMID"}
+                              </p>
+                            </div>
+
+                            <a
+                              href={request.sourceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(event) => event.stopPropagation()}
+                              className="mt-3 flex min-w-0 items-center gap-2 text-[11px] font-bold text-primary"
+                            >
+                              <span className="truncate">{request.sourceUrl}</span>
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                            </a>
+
+                            <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
+                              <div className="flex gap-2 text-[10px] font-black uppercase tracking-wider">
+                                <span className="text-emerald-500">{request.acceptCount} A</span>
+                                <span className="text-amber-500">{request.ignoreCount} I</span>
+                                <span className="text-red-500">{request.refuseCount} R</span>
+                              </div>
+                              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
+                                {formatDate(request.createdAt)}
+                              </span>
+                            </div>
+                          </article>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
 
       {showCreate && typeof document !== "undefined" ? createPortal(
         <>

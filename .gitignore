@@ -43,6 +43,7 @@ GoogleService-Info.plist
 
 # lockfile (project uses pnpm — ignore npm's lockfile)
 package-lock.json
+!functions/package-lock.json
 
 # firebase CLI artifacts
 .firebase/

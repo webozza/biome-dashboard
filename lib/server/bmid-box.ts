@@ -427,7 +427,7 @@ export async function applyBmidBoxAction(
       postTitle: request.previewData?.title ?? null,
     });
 
-    void broadcastPostNotification(request.ownerUserId, actorName, {
+    await broadcastPostNotification(request.ownerUserId, actorName, {
       type: "bmid_box_approved",
       title,
       body,
@@ -441,7 +441,7 @@ export async function applyBmidBoxAction(
   } else if (input.action === "reject_request") {
     // Only notify the owner on rejection
     const requestDocPath = buildNotificationRequestDocPath("box", id);
-    void notifyUser(request.ownerUserId, {
+    await notifyUser(request.ownerUserId, {
       type: "bmid_box_rejected",
       title: "BMID Box Update",
       body: `Your BMID Box request "${request.previewData?.title || "Untitled post"}" was not approved. Reason: ${input.rejectionReason || "Rejected by admin review"}`,

@@ -147,7 +147,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           actorName,
           title,
         });
-        void broadcastPostNotification(existing.userId, actorName, {
+        await broadcastPostNotification(existing.userId, actorName, {
           type: "bmid_content_approved",
           title,
           body,
@@ -209,7 +209,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     // Direct Notify owner on rejection
     if (existing.userId) {
       const postId = existing.postId ?? null;
-      void notifyUser(existing.userId, {
+      await notifyUser(existing.userId, {
         type: "bmid_content_rejected",
         title: "BMID Content Update",
         body: `Your post "${existing.postTitle || "Untitled post"}" was not approved. Reason: ${String(body.rejectionReason || "Rejected by admin")}`,

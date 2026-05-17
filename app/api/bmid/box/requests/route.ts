@@ -5,6 +5,7 @@ import { createDoc, getDoc, listDocIds } from "@/lib/server/firestore";
 import { buildDualityRequestFromBox } from "@/lib/server/bmid";
 import { ensureBmidBoxSeeded, getBmidBoxSettings } from "@/lib/server/bmid-box";
 import { error, json } from "@/lib/server/response";
+import { notifyAdminRequestCreated } from "@/lib/server/admin-request-email";
 
 type UserDoc = {
   id?: string;
@@ -210,6 +211,16 @@ export async function POST(req: NextRequest) {
       taggedUserAction: "pending",
     });
   }
+
+  await notifyAdminRequestCreated({
+    requestId: id,
+    type: "BMID Box",
+    userName: userName(owner),
+    userEmail: owner.email || "",
+    details: `Platform: ${sourcePlatform || "N/A"}\nStatus: ${type === "duality" ? "pending_tagged_user" : "pending_admin_review"}\nURL: ${sourceUrl}`,
+    dashboardPath: `/dashboard/bmid-box/requests/${id}`,
+    docPath: `bmidBoxRequests/${id}`,
+  });
 
   return json({ id }, 201);
 }

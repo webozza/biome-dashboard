@@ -181,7 +181,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   // Notifications & Emails
   if (transitionedTo && fresh.userId) {
     const isApproved = transitionedTo === "approved";
-    void notifyUser(fresh.userId, {
+    await notifyUser(fresh.userId, {
       type: isApproved ? "bmid_verification_approved" : "bmid_verification_rejected",
       title: isApproved ? "Verification Approved!" : "Verification Update",
       body: isApproved 

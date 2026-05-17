@@ -4,6 +4,7 @@ import { buildDualityRequestFromContent } from "@/lib/server/bmid";
 import { createDoc } from "@/lib/server/firestore";
 import { db } from "@/lib/server/firebase";
 import { error, json } from "@/lib/server/response";
+import { notifyAdminRequestCreated } from "@/lib/server/admin-request-email";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,15 @@ export async function POST(req: NextRequest) {
         taggedUserAction: "pending",
       });
     }
+    await notifyAdminRequestCreated({
+      requestId: id,
+      type: "Content",
+      userName,
+      userEmail: user.email || String(profile.email || ""),
+      details: `Title: ${postTitle || "N/A"}\nType: ${type}\nPlatform: ${String(body.platform || "N/A")}`,
+      dashboardPath: `/dashboard/content/${id}`,
+      docPath: `contentRequests/${id}`,
+    });
     return json({ id }, 201);
   } catch (e) {
     return error("transfer_failed", 500, { detail: String((e as Error).message) });

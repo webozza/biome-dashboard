@@ -5,6 +5,7 @@ import { createDoc } from "@/lib/server/firestore";
 import { guard } from "@/lib/server/guard";
 import { error, json, parsePagination } from "@/lib/server/response";
 import { ensureReservedBmidAssignmentsSynced } from "@/lib/server/bmid-number";
+import { notifyAdminRequestCreated } from "@/lib/server/admin-request-email";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
     try {
       const resolved = await resolveUserByEmail(body.email);
       if (!resolved.ok) return error(resolved.reason, 400);
-      const payload = {
+      const payload: Record<string, unknown> = {
         ...body,
         userId: resolved.user.id,
         email: resolved.user.email,
@@ -116,6 +117,15 @@ export async function POST(req: NextRequest) {
         documentUrl: null,
       };
       const id = await createDoc("verificationRequests", payload);
+      await notifyAdminRequestCreated({
+        requestId: id,
+        type: "Verification",
+        userName: String(payload.userName || resolved.user.name || "Unknown User"),
+        userEmail: String(payload.email || ""),
+        details: `Platform: ${String(payload.platform || "N/A")}\nSocial Account: ${String(payload.socialAccount || "N/A")}`,
+        dashboardPath: "/dashboard/verification",
+        docPath: `verificationRequests/${id}`,
+      });
       return json({ id }, 201);
     } catch (e) {
       return error("create_failed", 500, { detail: String((e as Error).message) });
@@ -125,7 +135,7 @@ export async function POST(req: NextRequest) {
   const user = await requireFirebaseUser(req);
   if (!user.ok) return error("unauthorized", 401, { reason: user.reason });
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     ...body,
     userId: user.uid,
     email: user.email || body.email || null,
@@ -137,6 +147,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const id = await createDoc("verificationRequests", payload);
+    await notifyAdminRequestCreated({
+      requestId: id,
+      type: "Verification",
+      userName: String(payload.userName || user.email || "Unknown User"),
+      userEmail: String(payload.email || ""),
+      details: `Platform: ${String(payload.platform || "N/A")}\nSocial Account: ${String(payload.socialAccount || "N/A")}`,
+      dashboardPath: "/dashboard/verification",
+      docPath: `verificationRequests/${id}`,
+    });
     return json({ id }, 201);
   } catch (e) {
     return error("create_failed", 500, { detail: String((e as Error).message) });

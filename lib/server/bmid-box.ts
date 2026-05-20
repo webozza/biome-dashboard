@@ -227,30 +227,14 @@ export async function patchBmidBoxSettings(patch: Partial<BmidBoxSettings>) {
 
 export async function getBmidBoxSummary() {
   const requests = await listBmidBoxRequests();
-  const active = requests.filter((request) => request.currentStatus !== "removed");
-
-  const leadsAccept = (r: BmidBoxRequest) =>
-    r.currentStatus === "pending_voting" &&
-    r.acceptCount > r.refuseCount &&
-    r.acceptCount > r.ignoreCount &&
-    r.acceptCount > 0;
-  const leadsRefuse = (r: BmidBoxRequest) =>
-    r.currentStatus === "pending_voting" &&
-    r.refuseCount > r.acceptCount &&
-    r.refuseCount > r.ignoreCount &&
-    r.refuseCount > 0;
 
   return {
-    total: active.length,
-    pendingAdminReview: active.filter((request) => request.currentStatus === "pending_admin_review").length,
-    pendingTaggedUser: active.filter((request) => request.currentStatus === "pending_tagged_user").length,
-    pendingVoting: active.filter((request) => request.currentStatus === "pending_voting").length,
-    approved:
-      active.filter((request) => request.currentStatus === "approved").length +
-      active.filter(leadsAccept).length,
-    refused:
-      active.filter((request) => request.currentStatus === "refused").length +
-      active.filter(leadsRefuse).length,
+    total: requests.length,
+    pendingAdminReview: requests.filter((request) => request.currentStatus === "pending_admin_review").length,
+    pendingTaggedUser: requests.filter((request) => request.currentStatus === "pending_tagged_user").length,
+    pendingVoting: requests.filter((request) => request.currentStatus === "pending_voting").length,
+    approved: requests.filter((request) => request.currentStatus === "approved").length,
+    refused: requests.filter((request) => request.currentStatus === "refused").length,
     removed: requests.filter((request) => request.currentStatus === "removed").length,
   };
 }
@@ -434,6 +418,21 @@ export async function applyBmidBoxAction(
       bmidRequestId: id,
       bmidSource: "box",
       bmidDecision: "accepted",
+      authorId: request.ownerUserId,
+      docPath: requestDocPath,
+      requestDocPath,
+    });
+
+    await notifyUser(request.ownerUserId, {
+      type: "bmid_box_approved",
+      title: "Your BMID Box request was approved",
+      body: request.previewData?.title
+        ? `Your BMID Box request "${request.previewData.title}" was approved. Voting is now open.`
+        : "Your BMID Box request was approved. Voting is now open.",
+      bmidRequestId: id,
+      bmidSource: "box",
+      bmidDecision: "accepted",
+      fromUid: "admin",
       authorId: request.ownerUserId,
       docPath: requestDocPath,
       requestDocPath,

@@ -8,7 +8,13 @@ export const dynamic = "force-dynamic";
 type BucketKey = "verification" | "content" | "box" | "duality";
 
 type VerificationDoc = { createdAt?: string; status?: string };
-type ContentDoc = { createdAt?: string; status?: string; userName?: string; postTitle?: string };
+type ContentDoc = {
+  createdAt?: string;
+  status?: string;
+  votingStatus?: string | null;
+  userName?: string;
+  postTitle?: string;
+};
 type BoxDoc = {
   createdAt?: string;
   currentStatus?: string;
@@ -63,6 +69,10 @@ function bucketKeyFor(iso: string | undefined): string | null {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return `${d.getFullYear()}-${d.getMonth()}`;
+}
+
+function contentStatus(c: ContentDoc): string | undefined {
+  return c.status === "in_review" && c.votingStatus === "open" ? "approved" : c.status;
 }
 
 async function safeList<T>(path: string): Promise<(T & { id: string })[]> {
@@ -126,7 +136,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     const pendingVerification = verifications.filter((v) => v.status === "pending").length;
-    const pendingContent = contents.filter((c) => c.status === "pending").length;
+    const pendingContent = contents.filter((c) => contentStatus(c) === "pending").length;
     const pendingBox = boxes.filter((b) =>
       ["submitted", "pending_admin_review", "pending_tagged_user", "pending_voting"].includes(
         b.currentStatus || ""
@@ -135,12 +145,12 @@ export async function GET(req: NextRequest) {
     const pendingDuality = dualities.filter((d) => d.status === "pending" || d.status === "waiting_tagged").length;
 
     const approvedTotal =
-      contents.filter((c) => c.status === "approved").length +
+      contents.filter((c) => contentStatus(c) === "approved").length +
       dualities.filter((d) => d.status === "approved").length +
       boxes.filter((b) => b.currentStatus === "approved").length +
       verifications.filter((v) => v.status === "approved").length;
     const refusedTotal =
-      contents.filter((c) => c.status === "rejected").length +
+      contents.filter((c) => contentStatus(c) === "rejected").length +
       dualities.filter((d) => d.status === "rejected").length +
       boxes.filter((b) => b.currentStatus === "refused").length +
       verifications.filter((v) => v.status === "rejected").length;
@@ -176,10 +186,11 @@ export async function GET(req: NextRequest) {
     let cancelledCount = 0;
 
     for (const c of contents) {
-      if (c.status === "pending" || c.status === "in_review") pendingCount += 1;
-      else if (c.status === "approved") approvedCount += 1;
-      else if (c.status === "rejected") refusedCount += 1;
-      else if (c.status === "cancelled") cancelledCount += 1;
+      const s = contentStatus(c);
+      if (s === "pending" || s === "in_review") pendingCount += 1;
+      else if (s === "approved") approvedCount += 1;
+      else if (s === "rejected") refusedCount += 1;
+      else if (s === "cancelled") cancelledCount += 1;
     }
     for (const d of dualities) {
       if (d.status === "pending" || d.status === "waiting_tagged") pendingCount += 1;
@@ -240,19 +251,21 @@ export async function GET(req: NextRequest) {
 
     const content = {
       total: contents.length,
-      pending: contents.filter((c) => c.status === "pending").length,
-      waitingTagged: contents.filter((c) => c.status === "waiting_tagged").length,
-      inReview: contents.filter((c) => c.status === "in_review").length,
-      approved: contents.filter((c) => c.status === "approved").length,
-      rejected: contents.filter((c) => c.status === "rejected").length,
-      cancelled: contents.filter((c) => c.status === "cancelled").length,
+      pending: contents.filter((c) => contentStatus(c) === "pending").length,
+      waitingTagged: contents.filter((c) => contentStatus(c) === "waiting_tagged").length,
+      inReview: contents.filter((c) => contentStatus(c) === "in_review").length,
+      approved: contents.filter((c) => contentStatus(c) === "approved").length,
+      rejected: contents.filter((c) => contentStatus(c) === "rejected").length,
+      cancelled: contents.filter((c) => contentStatus(c) === "cancelled").length,
     };
 
     const pendingActions = {
       verification: pendingVerification,
       contentOwn: pendingContent,
       dualityWaitingTagged: dualities.filter((d) => d.status === "waiting_tagged").length,
-      votingOpen: voting.filter((v) => v.status === "open").length,
+      votingOpen:
+        voting.filter((v) => v.status === "open").length +
+        boxes.filter((b) => b.votingStatus === "open" && b.currentStatus !== "removed").length,
       flaggedOpen: flaggedOpen.length,
     };
 

@@ -30,6 +30,8 @@ export type ApprovalNotificationRequestType = "own" | "duality";
 
 type PushProvider = "expo" | "fcm";
 
+const PUSH_CHANNEL_ID = "project_v7";
+
 type StoredPushToken = {
   ref: FirebaseFirestore.DocumentReference;
   token: string;
@@ -97,6 +99,12 @@ type NotificationDebugContext = {
 type SendPushNotificationOptions = {
   debugContext?: NotificationDebugContext;
   alreadyQueuedTokenKeys?: Set<string>;
+};
+
+type PushSendResult = {
+  successCount: number;
+  failureCount: number;
+  failureCodes: Map<string, number>;
 };
 
 function buildNotificationDebugPrefix(ctx: NotificationDebugContext) {
@@ -389,6 +397,12 @@ function summarizeFailureCodes(failureCodes: Map<string, number>): string {
     .join(", ");
 }
 
+function summarizePushResult(result: PushSendResult | null): string {
+  if (!result) return "not_attempted";
+  const failures = summarizeFailureCodes(result.failureCodes);
+  return `success=${result.successCount} failure=${result.failureCount}${failures ? ` codes=${failures}` : ""}`;
+}
+
 function toIso(value: unknown): string | null {
   if (!value) return null;
   if (typeof value === "object" && value && "toDate" in value && typeof (value as { toDate: () => Date }).toDate === "function") {
@@ -502,7 +516,7 @@ async function sendExpoPushNotifications(
             data,
             sound: "default",
             priority: "high",
-            channelId: "high_importance_channel",
+            channelId: PUSH_CHANNEL_ID,
           }))
         ),
       });
@@ -559,9 +573,10 @@ async function sendFcmPushNotifications(
   body: string,
   data?: Record<string, string>,
   debugPrefix?: string
-) {
+): Promise<PushSendResult> {
   const tokens = tokenEntries.map((entry) => entry.token);
-  if (tokens.length === 0) return;
+  if (tokens.length === 0) return { successCount: 0, failureCount: 0, failureCodes: new Map() };
+  const emptyFailureCodes = new Map<string, number>();
 
   const message: admin.messaging.MulticastMessage = {
     tokens,
@@ -580,7 +595,7 @@ async function sendFcmPushNotifications(
       priority: "high",
       notification: {
         sound: "default",
-        channelId: "high_importance_channel",
+        channelId: PUSH_CHANNEL_ID,
         clickAction: "FLUTTER_NOTIFICATION_CLICK",
         defaultSound: true,
         defaultVibrateTimings: true,
@@ -617,11 +632,18 @@ async function sendFcmPushNotifications(
           failureCodes.set(errorCode, (failureCodes.get(errorCode) || 0) + 1);
           if (
             errorCode === "messaging/invalid-registration-token" ||
-            errorCode === "messaging/registration-token-not-registered" ||
-            errorCode === "messaging/mismatched-credential"
+            errorCode === "messaging/registration-token-not-registered"
           ) {
             tokenRefsToRemove.push(tokenEntries[idx].ref);
           }
+          console.warn(`${debugPrefix || "[fcm]"} token send failed`, {
+            targetUid,
+            provider: tokenEntries[idx].provider,
+            platform: tokenEntries[idx].platform,
+            deviceId: tokenEntries[idx].deviceId,
+            code: errorCode,
+            message: resp.error?.message || null,
+          });
         }
       });
 
@@ -630,7 +652,7 @@ async function sendFcmPushNotifications(
       const failureSummary = summarizeFailureCodes(failureCodes);
       if (failureCodes.has("messaging/mismatched-credential")) {
         console.error(
-          `${debugPrefix || "[fcm]"} credential mismatch: removing tokens that do not belong to this Firebase project`
+          `${debugPrefix || "[fcm]"} credential mismatch: FCM send was rejected. Check that the dashboard Firebase service account has cloudmessaging.messages.create on this project. Tokens were not removed.`
         );
       }
       const actuallySent = response.successCount;
@@ -643,11 +665,22 @@ async function sendFcmPushNotifications(
           `${debugPrefix || "[fcm]"} all ${tokens.length} tokens failed for ${targetUid}${failureSummary ? ` (${failureSummary})` : ""}`
         );
       }
+      return {
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+        failureCodes,
+      };
     } else {
       console.log(`${debugPrefix || "[fcm]"} successfully delivered to all ${tokens.length} devices for ${targetUid}`);
+      return { successCount: response.successCount, failureCount: 0, failureCodes: emptyFailureCodes };
     }
   } catch (e) {
     console.error(`${debugPrefix || "[fcm]"} critical failure for ${targetUid}`, e);
+    return {
+      successCount: 0,
+      failureCount: tokens.length,
+      failureCodes: new Map([["critical_failure", tokens.length]]),
+    };
   }
 }
 
@@ -828,29 +861,34 @@ export async function sendPushNotification(
     );
   }
 
-  const expoEntries = tokenEntries.filter((entry) => entry.provider === "expo");
-  const expoDeviceIds = new Set(expoEntries.map((entry) => entry.deviceId).filter((value): value is string => Boolean(value)));
-  const fcmEntries = tokenEntries.filter(
-    (entry) => entry.provider === "fcm" && !(entry.deviceId && expoDeviceIds.has(entry.deviceId))
+  const allExpoEntries = tokenEntries.filter((entry) => entry.provider === "expo");
+  const fcmEntries = tokenEntries.filter((entry) => entry.provider === "fcm");
+  const fcmDeviceIds = new Set(fcmEntries.map((entry) => entry.deviceId).filter((value): value is string => Boolean(value)));
+  const expoEntries = allExpoEntries.filter(
+    (entry) => !(entry.platform === "android" && entry.deviceId && fcmDeviceIds.has(entry.deviceId))
   );
-  const skippedFcmEntries = tokenEntries.filter(
-    (entry) => entry.provider === "fcm" && Boolean(entry.deviceId && expoDeviceIds.has(entry.deviceId))
+  const skippedExpoEntries = allExpoEntries.filter(
+    (entry) => Boolean(entry.platform === "android" && entry.deviceId && fcmDeviceIds.has(entry.deviceId))
   );
   const broadcastSkippedEntries = tokenEntries.filter((entry) =>
-    Boolean(alreadyQueuedTokenKeys?.has(`${entry.provider}:${entry.token}`))
+    entry.provider === "expo" && Boolean(alreadyQueuedTokenKeys?.has(`${entry.provider}:${entry.token}`))
   );
   const filteredExpoEntries = expoEntries.filter(
     (entry) => !alreadyQueuedTokenKeys?.has(`${entry.provider}:${entry.token}`)
   );
-  const filteredFcmEntries = fcmEntries.filter(
+  const filteredSkippedExpoEntries = skippedExpoEntries.filter(
     (entry) => !alreadyQueuedTokenKeys?.has(`${entry.provider}:${entry.token}`)
   );
+  const filteredFcmEntries = fcmEntries;
   const debugPrefix = debugContext
     ? buildNotificationDebugPrefix({ ...debugContext, targetUid })
     : `[push][debug] targetUid=${targetUid}`;
 
   console.log(
-    `${debugPrefix} pushTokens rawDocs=${tokensSnap.size} invalidDocs=${invalidTokenDocCount} parsed=${rawTokenEntries.length} deduped=${tokenEntries.length} expo=${expoEntries.length} fcm=${fcmEntries.length} skippedFcm=${skippedFcmEntries.length}`
+    `${debugPrefix} pushConfig channelId=${PUSH_CHANNEL_ID} strategy=expo_plus_fcm_with_android_expo_fallback`
+  );
+  console.log(
+    `${debugPrefix} pushTokens rawDocs=${tokensSnap.size} invalidDocs=${invalidTokenDocCount} parsed=${rawTokenEntries.length} deduped=${tokenEntries.length} expo=${expoEntries.length} fcm=${fcmEntries.length} skippedExpo=${skippedExpoEntries.length}`
   );
   console.log(
     `${debugPrefix} pushTokenEntries`,
@@ -875,9 +913,9 @@ export async function sendPushNotification(
     );
   }
 
-  if (skippedFcmEntries.length > 0) {
+  if (skippedExpoEntries.length > 0) {
     console.log(
-      `[push] skipped ${skippedFcmEntries.length} FCM tokens for ${targetUid} because the same device already has an Expo token`
+      `${debugPrefix} [token-choice] skipped ${skippedExpoEntries.length} Android Expo token(s) because the same device has FCM; kept as fallback`
     );
   }
 
@@ -891,19 +929,52 @@ export async function sendPushNotification(
   }
 
   if (alreadyQueuedTokenKeys) {
-    for (const entry of [...filteredExpoEntries, ...filteredFcmEntries]) {
+    for (const entry of filteredExpoEntries) {
       alreadyQueuedTokenKeys.add(`${entry.provider}:${entry.token}`);
     }
   }
 
-  await Promise.all([
+  console.log(
+    `${debugPrefix} [send-plan] expo=${filteredExpoEntries.length} fcm=${filteredFcmEntries.length} androidExpoFallback=${filteredSkippedExpoEntries.length}`
+  );
+
+  const [, fcmResult] = await Promise.all([
     filteredExpoEntries.length > 0
       ? sendExpoPushNotifications(targetUid, filteredExpoEntries, title, body, data, `${debugPrefix} [expo]`)
       : Promise.resolve(),
     filteredFcmEntries.length > 0
       ? sendFcmPushNotifications(targetUid, filteredFcmEntries, title, body, data, `${debugPrefix} [fcm]`)
-      : Promise.resolve(),
+      : Promise.resolve(null),
   ]);
+
+  console.log(`${debugPrefix} [fcm-result] ${summarizePushResult(fcmResult)}`);
+
+  if (fcmResult && fcmResult.successCount === 0 && filteredSkippedExpoEntries.length > 0) {
+    console.warn(
+      `${debugPrefix} [fallback] FCM failed for ${filteredFcmEntries.length} Android token(s); trying ${filteredSkippedExpoEntries.length} Expo fallback token(s)`
+    );
+    if (alreadyQueuedTokenKeys) {
+      for (const entry of filteredSkippedExpoEntries) {
+        alreadyQueuedTokenKeys.add(`${entry.provider}:${entry.token}`);
+      }
+    }
+    await sendExpoPushNotifications(
+      targetUid,
+      filteredSkippedExpoEntries,
+      title,
+      body,
+      data,
+      `${debugPrefix} [expo-fallback]`
+    );
+  } else if (fcmResult && fcmResult.successCount === 0) {
+    console.warn(
+      `${debugPrefix} [fallback] skipped reason=no_android_expo_fallback_tokens fcm=${summarizePushResult(fcmResult)}`
+    );
+  } else if (fcmResult && filteredSkippedExpoEntries.length > 0) {
+    console.log(
+      `${debugPrefix} [fallback] skipped reason=fcm_success fcm=${summarizePushResult(fcmResult)}`
+    );
+  }
 }
 
 /**

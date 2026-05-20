@@ -5,17 +5,27 @@ import { useSearchParams } from "next/navigation";
 import { useDeferredValue, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  ExternalLink,
-  Filter,
+  Box,
+  CheckCircle,
+  Clock,
+  GitBranch,
   Loader2,
+  Minus,
   Plus,
-  Search,
+  ShieldX,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
+  Vote,
   X,
+  XCircle,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { BmidBoxPlatform, BmidBoxRequestType } from "@/lib/data/bmid-box";
+import type { BmidBoxPlatform, BmidBoxRequest, BmidBoxRequestType } from "@/lib/data/bmid-box";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { DataTable } from "@/components/ui/data-table";
+import { MetricCard } from "@/components/ui/metric-card";
+import { SearchFilterBar } from "@/components/ui/search-filter-bar";
 import { UserPicker, type UserPickerOption } from "@/components/ui/user-picker";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import {
@@ -25,7 +35,6 @@ import {
 } from "@/lib/bmid-box-client";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { formatDate } from "@/lib/format";
-import { Box } from "lucide-react";
 
 const platformTone: Record<string, string> = {
   instagram: "bg-rose-500/10 text-rose-400 border-rose-500/20",
@@ -43,16 +52,6 @@ const statusOptions = [
   { value: "approved", label: "Approved" },
   { value: "refused", label: "Refused" },
   { value: "removed", label: "Removed" },
-];
-
-const boardColumns = [
-  { value: "submitted", label: "Submitted", tone: "border-cyan-500/20 bg-cyan-500/[0.03]" },
-  { value: "pending_admin_review", label: "Admin Review", tone: "border-amber-500/20 bg-amber-500/[0.03]" },
-  { value: "pending_tagged_user", label: "Tagged User", tone: "border-sky-500/20 bg-sky-500/[0.03]" },
-  { value: "pending_voting", label: "Voting", tone: "border-violet-500/20 bg-violet-500/[0.03]" },
-  { value: "approved", label: "Approved", tone: "border-green-500/20 bg-green-500/[0.03]" },
-  { value: "refused", label: "Refused", tone: "border-red-500/20 bg-red-500/[0.03]" },
-  { value: "removed", label: "Removed", tone: "border-zinc-500/20 bg-zinc-500/[0.03]" },
 ];
 
 const typeOptions = [
@@ -103,9 +102,11 @@ export function RequestsTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<CreateFormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deferredSearch = useDeferredValue(searchQuery);
+  const pageSize = 10;
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -122,6 +123,7 @@ export function RequestsTab() {
       queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
       setSelectedIds([]);
       setConfirmDelete(false);
+      setCurrentPage(1);
     },
   });
 
@@ -206,33 +208,8 @@ export function RequestsTab() {
   }, [deferredSearch, filters, listQuery.data?.items]);
 
   const summary = listQuery.data?.summary;
-  const visibleColumns = useMemo(
-    () =>
-      filters.status && filters.status !== "all" && filters.status !== "pending"
-        ? boardColumns.filter((column) => column.value === filters.status)
-        : boardColumns.filter((column) => filters.status === "removed" || column.value !== "removed"),
-    [filters.status]
-  );
-  const grouped = useMemo(
-    () =>
-      visibleColumns.map((column) => ({
-        ...column,
-        items: filtered.filter((request) => request.currentStatus === column.value),
-      })),
-    [filtered, visibleColumns]
-  );
-
-  const cards = [
-    { title: "Total", value: summary?.total || 0, tone: "border-emerald-500/20 bg-emerald-500/5 text-emerald-500" },
-    { title: "Admin", value: summary?.pendingAdminReview || 0, tone: "border-amber-500/20 bg-amber-500/5 text-amber-500" },
-    { title: "Tagged", value: summary?.pendingTaggedUser || 0, tone: "border-sky-500/20 bg-sky-500/5 text-sky-500" },
-    { title: "Voting", value: summary?.pendingVoting || 0, tone: "border-violet-500/20 bg-violet-500/5 text-violet-500" },
-    { title: "Approved", value: summary?.approved || 0, tone: "border-green-500/20 bg-green-500/5 text-green-500" },
-    { title: "Refused", value: summary?.refused || 0, tone: "border-red-500/20 bg-red-500/5 text-red-500" },
-    { title: "Removed", value: summary?.removed || 0, tone: "border-zinc-500/20 bg-zinc-500/5 text-zinc-500" },
-  ];
-
-  const activeFilterCount = Object.values(filters).filter((value) => value && value !== "all").length;
+  const rows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
   function setFilterValue(key: string, value: string) {
     setFilters((current) => {
@@ -241,6 +218,7 @@ export function RequestsTab() {
       else next[key] = value;
       return next;
     });
+    setCurrentPage(1);
   }
 
   function toggleSelected(id: string) {
@@ -249,55 +227,136 @@ export function RequestsTab() {
     );
   }
 
-  function chipGroup(
-    key: string,
-    options: { value: string; label: string }[]
-  ) {
-    const active = filters[key] || "all";
-    return (
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        <button
-          type="button"
-          onClick={() => setFilterValue(key, "all")}
-          className={`shrink-0 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition ${
-            active === "all"
-              ? "border-primary/30 bg-primary/10 text-primary"
-              : "border-border bg-surface text-muted hover:text-main"
+  const columns = [
+    {
+      key: "id",
+      label: "Request",
+      render: (request: BmidBoxRequest & { id: string }) => (
+        <Link
+          href={`/dashboard/bmid-box/requests/${request.id}`}
+          onClick={(event) => event.stopPropagation()}
+          className="font-mono text-[10px] font-bold text-primary"
+        >
+          {request.id}
+        </Link>
+      ),
+    },
+    {
+      key: "preview",
+      label: "Item",
+      render: (request: BmidBoxRequest & { id: string }) => (
+        <div className="max-w-[280px]">
+          <p className="line-clamp-1 font-bold text-main">{request.previewData.title || "Untitled Box request"}</p>
+          <p className="line-clamp-1 text-xs text-muted">
+            {request.previewData.caption || request.previewData.description || request.sourceUrl}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "owner",
+      label: "Owner",
+      render: (request: BmidBoxRequest & { id: string }) => (
+        <div>
+          <p className="font-bold text-main">{request.ownerSnapshot?.name || "Unknown"}</p>
+          <p className="text-[10px] font-medium text-muted">{request.ownerSnapshot?.bmidNumber || "No BMID"}</p>
+        </div>
+      ),
+    },
+    {
+      key: "tagged",
+      label: "Tagged",
+      render: (request: BmidBoxRequest & { id: string }) => (
+        <span className="font-medium text-main">{request.taggedSnapshot?.name || "Same as owner"}</span>
+      ),
+    },
+    {
+      key: "type",
+      label: "Type",
+      render: (request: BmidBoxRequest & { id: string }) => (
+        <span
+          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+            request.type === "duality"
+              ? "border border-purple-500/20 bg-purple-500/10 text-purple-400"
+              : "bg-surface-hover text-muted"
           }`}
         >
-          All
+          {request.type === "duality" ? <GitBranch className="h-3 w-3" /> : null}
+          {request.type}
+        </span>
+      ),
+    },
+    {
+      key: "platform",
+      label: "Platform",
+      render: (request: BmidBoxRequest & { id: string }) => (
+        <span className={`inline-flex rounded-lg border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${platformTone[request.sourcePlatform]}`}>
+          {request.sourcePlatform}
+        </span>
+      ),
+    },
+    {
+      key: "votes",
+      label: "Votes",
+      render: (request: BmidBoxRequest & { id: string }) => {
+        const total = request.acceptCount + request.ignoreCount + request.refuseCount;
+        if (total === 0) return <span className="text-xs text-muted">-</span>;
+        return (
+          <div className="flex items-center gap-3 text-[10px] font-bold">
+            <span className="flex items-center gap-0.5 text-emerald-400">
+              <ThumbsUp className="h-3 w-3" /> {request.acceptCount}
+            </span>
+            <span className="flex items-center gap-0.5 text-amber-400">
+              <Minus className="h-3 w-3" /> {request.ignoreCount}
+            </span>
+            <span className="flex items-center gap-0.5 text-red-400">
+              <ThumbsDown className="h-3 w-3" /> {request.refuseCount}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (request: BmidBoxRequest & { id: string }) => <StatusBadge status={request.currentStatus} />,
+    },
+    {
+      key: "createdAt",
+      label: "Date",
+      render: (request: BmidBoxRequest & { id: string }) => (
+        <span className="text-xs font-medium text-muted">{formatDate(request.createdAt)}</span>
+      ),
+    },
+    {
+      key: "actions",
+      label: "",
+      render: (request: BmidBoxRequest & { id: string }) => (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setSelectedIds([request.id]);
+            setConfirmDelete(true);
+          }}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-[#ef4444] transition-colors hover:border-[#ef4444]/20 hover:bg-[#ef4444]/10"
+          title="Remove request"
+          aria-label="Remove request"
+        >
+          <Trash2 className="h-4 w-4" />
         </button>
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setFilterValue(key, option.value)}
-            className={`shrink-0 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition ${
-              active === option.value
-                ? "border-primary/30 bg-primary/10 text-primary"
-                : "border-border bg-surface text-muted hover:text-main"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    );
-  }
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-3">
-          <Filter className="h-4 w-4 text-primary" />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">
-            {filtered.length} visible
-          </span>
-          {activeFilterCount > 0 ? (
-            <span className="rounded-lg bg-primary/10 px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-primary">
-              {activeFilterCount} active
-            </span>
-          ) : null}
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">BMID Box Table</p>
+          <p className="mt-1 text-sm font-medium text-muted">
+            {filtered.length} visible request{filtered.length === 1 ? "" : "s"}
+          </p>
         </div>
         <button
           onClick={() => {
@@ -312,195 +371,77 @@ export function RequestsTab() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-7">
-        {cards.map((card) => (
-          <div
-            key={card.title}
-            className={`rounded-2xl border px-4 py-3 ${card.tone}`}
-          >
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{card.title}</p>
-            <div className="mt-2 flex items-end justify-between gap-2">
-              <span className="text-2xl font-black tracking-tight text-main">{card.value}</span>
-              <Box className="h-4 w-4 opacity-60" />
-            </div>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+        <MetricCard title="Total Requests" value={summary?.total || 0} icon={Box} color="#06b6d4" />
+        <MetricCard title="Admin Review" value={summary?.pendingAdminReview || 0} icon={Clock} color="#f59e0b" />
+        <MetricCard title="Tagged User" value={summary?.pendingTaggedUser || 0} icon={GitBranch} color="#0ea5e9" />
+        <MetricCard title="Voting Queue" value={summary?.pendingVoting || 0} icon={Vote} color="#8b5cf6" />
+        <MetricCard title="Approved" value={summary?.approved || 0} icon={CheckCircle} color="var(--primary)" />
+        <MetricCard title="Refused" value={summary?.refused || 0} icon={XCircle} color="#ef4444" />
+        <MetricCard title="Removed" value={summary?.removed || 0} icon={ShieldX} color="#6b7280" />
       </div>
 
-      <section className="rounded-2xl border border-border bg-surface">
-        <div className="space-y-4 border-b border-border p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative min-w-[260px] flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search request, owner, tagged user, or URL"
-                className="w-full rounded-xl border border-border bg-background py-3 pl-10 pr-3 text-sm font-bold text-main outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setFilters({});
-                  setSearchQuery("");
-                }}
-                className="rounded-xl border border-border bg-background px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-muted hover:text-main"
-              >
-                Clear
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                disabled={selectedIds.length === 0}
-                className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-red-500 disabled:opacity-40"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                {selectedIds.length}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-muted">Status</p>
-              {chipGroup("status", statusOptions)}
-            </div>
-            <div className="grid gap-3 lg:grid-cols-3">
-              <div>
-                <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-muted">Type</p>
-                {chipGroup("type", typeOptions)}
-              </div>
-              <div>
-                <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-muted">Platform</p>
-                {chipGroup("platform", platformOptions)}
-              </div>
-              <div>
-                <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-muted">Owner</p>
-                {chipGroup("ownerVerified", [{ value: "verified", label: "Verified" }])}
-              </div>
-            </div>
-          </div>
+      <div className="card">
+        <div className="mb-6">
+          <SearchFilterBar
+            searchQuery={searchQuery}
+            onSearchChange={(value) => {
+              setSearchQuery(value);
+              setCurrentPage(1);
+            }}
+            searchPlaceholder="Search request, owner, tagged user, title, or URL..."
+            filters={[
+              { key: "status", label: "Status", options: statusOptions },
+              { key: "type", label: "Type", options: typeOptions },
+              { key: "platform", label: "Platform", options: platformOptions },
+              { key: "ownerVerified", label: "Owner", options: [{ value: "verified", label: "Verified" }] },
+            ]}
+            activeFilters={filters}
+            onFilterChange={setFilterValue}
+            onClearFilters={() => {
+              setFilters({});
+              setSearchQuery("");
+              setCurrentPage(1);
+            }}
+            selectedCount={selectedIds.length}
+            onBulkDelete={() => setConfirmDelete(true)}
+          />
         </div>
 
-        {listQuery.isLoading ? (
-          <div className="grid gap-4 p-4 lg:grid-cols-3 xl:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <div key={index} className="h-40 animate-pulse rounded-2xl bg-white/[0.04]" />
-            ))}
+        {listQuery.isError ? (
+          <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300">
+            Failed to load Box requests: {listQuery.error.message}
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex min-h-[360px] items-center justify-center p-8 text-center">
-            <div>
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-background">
-                <Box className="h-6 w-6 text-muted" />
-              </div>
-              <p className="mt-4 text-xs font-black uppercase tracking-[0.2em] text-main">No Box requests found</p>
-              <p className="mt-2 text-xs text-muted">Try clearing a filter.</p>
+        ) : null}
+
+        <div className="relative">
+          {listQuery.isFetching ? (
+            <div className="absolute right-3 top-[-10px] z-10 flex items-center gap-2 rounded-full border border-white/10 bg-surface/90 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-muted">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Syncing
             </div>
-          </div>
-        ) : (
-          <div className="overflow-x-auto p-4">
-            <div className="grid min-w-[1120px] gap-4" style={{ gridTemplateColumns: `repeat(${grouped.length}, minmax(260px, 1fr))` }}>
-              {grouped.map((column) => (
-                <div key={column.value} className={`rounded-2xl border ${column.tone}`}>
-                  <div className="flex items-center justify-between border-b border-border px-3 py-3">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-main">{column.label}</p>
-                      <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.14em] text-muted">
-                        {column.items.length} request{column.items.length === 1 ? "" : "s"}
-                      </p>
-                    </div>
-                    <StatusBadge status={column.value} size="xs" />
-                  </div>
-
-                  <div className="space-y-3 p-3">
-                    {column.items.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-border bg-background/50 px-3 py-8 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                        Empty
-                      </div>
-                    ) : (
-                      column.items.map((request) => {
-                        const selected = selectedIds.includes(request.id);
-                        return (
-                          <article
-                            key={request.id}
-                            onClick={() => {
-                              window.location.href = `/dashboard/bmid-box/requests/${request.id}`;
-                            }}
-                            className={`cursor-pointer rounded-2xl border border-border bg-background p-3 transition hover:border-primary/30 ${
-                              selected ? "ring-2 ring-primary/20" : ""
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <Link
-                                  href={`/dashboard/bmid-box/requests/${request.id}`}
-                                  onClick={(event) => event.stopPropagation()}
-                                  className="font-mono text-[10px] font-black text-primary"
-                                >
-                                  {request.id}
-                                </Link>
-                                <h3 className="mt-2 line-clamp-2 text-sm font-black leading-snug text-main">
-                                  {request.previewData.title || "Untitled Box request"}
-                                </h3>
-                              </div>
-                              <input
-                                type="checkbox"
-                                checked={selected}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={() => toggleSelected(request.id)}
-                                className="mt-0.5 h-4 w-4 shrink-0 rounded-md accent-primary"
-                              />
-                            </div>
-
-                            <div className="mt-3 flex flex-wrap gap-1.5">
-                              <StatusBadge status={request.type} size="xs" />
-                              <span className={`inline-flex rounded-lg border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${platformTone[request.sourcePlatform]}`}>
-                                {request.sourcePlatform}
-                              </span>
-                            </div>
-
-                            <div className="mt-3 rounded-xl border border-border bg-surface px-3 py-2">
-                              <p className="truncate text-xs font-black text-main">{request.ownerSnapshot?.name || "Unknown"}</p>
-                              <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
-                                {request.ownerSnapshot?.bmidNumber || "No BMID"}
-                              </p>
-                            </div>
-
-                            <a
-                              href={request.sourceUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(event) => event.stopPropagation()}
-                              className="mt-3 flex min-w-0 items-center gap-2 text-[11px] font-bold text-primary"
-                            >
-                              <span className="truncate">{request.sourceUrl}</span>
-                              <ExternalLink className="h-3 w-3 shrink-0" />
-                            </a>
-
-                            <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
-                              <div className="flex gap-2 text-[10px] font-black uppercase tracking-wider">
-                                <span className="text-emerald-500">{request.acceptCount} A</span>
-                                <span className="text-amber-500">{request.ignoreCount} I</span>
-                                <span className="text-red-500">{request.refuseCount} R</span>
-                              </div>
-                              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
-                                {formatDate(request.createdAt)}
-                              </span>
-                            </div>
-                          </article>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
+          ) : null}
+          <DataTable
+            columns={columns}
+            data={rows}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            selectedItems={selectedIds}
+            onToggleItem={toggleSelected}
+            onSelectAll={(ids) => setSelectedIds(ids)}
+            getId={(request) => request.id}
+            onRowClick={(request) => {
+              window.location.href = `/dashboard/bmid-box/requests/${request.id}`;
+            }}
+            emptyMessage="No Box requests found"
+            emptyDescription="Change filters or search within the current result set."
+            loading={listQuery.isLoading}
+          />
+        </div>
+      </div>
 
       {showCreate && typeof document !== "undefined" ? createPortal(
         <>

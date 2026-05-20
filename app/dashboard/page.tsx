@@ -185,7 +185,7 @@ export default function DashboardPage() {
                 { label: "Total requests", value: data.content.total, href: "/dashboard/content" },
                 { label: "Pending review", value: data.content.pending, href: "/dashboard/content?status=pending" },
                 { label: "Waiting tagged", value: data.content.waitingTagged, href: "/dashboard/content?status=waiting_tagged" },
-                { label: "Approved", value: data.content.approved + data.content.inReview, href: "/dashboard/content?status=approved" },
+                { label: "Approved", value: data.content.approved, href: "/dashboard/content?status=approved" },
                 { label: "Rejected", value: data.content.rejected, href: "/dashboard/content?status=rejected" },
                 { label: "Cancelled", value: data.content.cancelled, href: "/dashboard/content?status=cancelled" },
               ] as const)

@@ -9,6 +9,7 @@ import {
   getBmidBoxSummary,
   listFilteredBmidBoxRequests,
 } from "@/lib/server/bmid-box";
+import { notifyAdminRequestCreated } from "@/lib/server/admin-request-email";
 
 type UserDoc = {
   id: string;
@@ -193,6 +194,17 @@ export async function POST(req: NextRequest) {
       taggedUserAction: "pending",
     });
   }
+
+  const notifyResult = await notifyAdminRequestCreated({
+    requestId: id,
+    type: "BMID Box",
+    userName: userName(owner),
+    userEmail: owner.email || "",
+    details: `Source Platform: ${sourcePlatform || "N/A"}\nStatus: ${type === "duality" ? "pending_tagged_user" : "pending_admin_review"}\nSource URL: ${sourceUrl}`,
+    dashboardPath: `/dashboard/bmid-box/requests/${id}`,
+    docPath: `bmidBoxRequests/${id}`,
+  });
+  console.log("[bmid-box][create] admin_email_result", { id, notifyResult });
 
   return json({ id }, 201);
 }

@@ -161,6 +161,7 @@ export async function getAuthedClient(): Promise<{ client: Auth.OAuth2Client; em
 
 export async function sendGmail(opts: {
   to: string;
+  cc?: string | string[];
   subject: string;
   html: string;
   text: string;
@@ -181,6 +182,9 @@ export async function sendGmail(opts: {
   const headers = [
     `From: "${opts.fromName}" <${authed.email}>`,
     `To: ${opts.to}`,
+    opts.cc
+      ? `Cc: ${Array.isArray(opts.cc) ? opts.cc.filter(Boolean).join(", ") : opts.cc}`
+      : null,
     opts.replyTo ? `Reply-To: ${opts.replyTo}` : null,
     `Subject: ${encodeHeader(opts.subject)}`,
     "MIME-Version: 1.0",

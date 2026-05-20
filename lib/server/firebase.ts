@@ -26,7 +26,11 @@ export function initFirebase(): void {
     (process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "").trim() ||
     (process.env.GOOGLE_APPLICATION_CREDENTIALS || "").trim();
 
-  let svc: admin.ServiceAccount & { private_key?: string };
+  let svc: admin.ServiceAccount & {
+    private_key?: string;
+    project_id?: string;
+    client_email?: string;
+  };
 
   if (raw) {
     const trimmed = raw.replace(/^['"]|['"]$/g, "");
@@ -43,6 +47,16 @@ export function initFirebase(): void {
 
   if (svc.private_key && svc.private_key.includes("\\n")) {
     svc.private_key = svc.private_key.replace(/\\n/g, "\n");
+  }
+
+  console.log("[firebase-admin] initializing", {
+    projectId: svc.project_id || null,
+    clientEmail: svc.client_email || null,
+  });
+  if (svc.client_email?.startsWith("eas-submit@")) {
+    console.warn(
+      "[firebase-admin] EAS submit service account detected. It may not have Firebase Cloud Messaging send permission; grant cloudmessaging.messages.create or use a Firebase Admin SDK service account."
+    );
   }
 
   admin.initializeApp({

@@ -217,7 +217,7 @@ export async function POST(req: NextRequest) {
     type: "BMID Box",
     userName: userName(owner),
     userEmail: owner.email || "",
-    details: `Platform: ${sourcePlatform || "N/A"}\nStatus: ${type === "duality" ? "pending_tagged_user" : "pending_admin_review"}\nURL: ${sourceUrl}`,
+    details: `Source Platform: ${sourcePlatform || "N/A"}\nStatus: ${type === "duality" ? "pending_tagged_user" : "pending_admin_review"}\nSource URL: ${sourceUrl}`,
     dashboardPath: `/dashboard/bmid-box/requests/${id}`,
     docPath: `bmidBoxRequests/${id}`,
   });

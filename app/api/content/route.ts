@@ -5,6 +5,7 @@ import { buildDualityRequestFromContent } from "@/lib/server/bmid";
 import { db } from "@/lib/server/firebase";
 import { error, json, parsePagination } from "@/lib/server/response";
 import { contentRequests } from "@/lib/data/mock-data";
+import { notifyAdminRequestCreated } from "@/lib/server/admin-request-email";
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +165,16 @@ export async function POST(req: NextRequest) {
         taggedUserAction: "pending",
       });
     }
+    const notifyResult = await notifyAdminRequestCreated({
+      requestId: id,
+      type: "Content",
+      userName: ownerName,
+      userEmail: owner.email || "",
+      details: `Title: ${String(body.postTitle || "N/A")}\nType: ${type}\nContent: ${String(body.postPreview || "N/A")}`,
+      dashboardPath: `/dashboard/content/${id}`,
+      docPath: `contentRequests/${id}`,
+    });
+    console.log("[content][create] admin_email_result", { id, notifyResult });
     return json({ id }, 201);
   } catch (e) {
     return error("create_failed", 500, { detail: String((e as Error).message) });

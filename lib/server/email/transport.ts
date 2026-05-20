@@ -36,6 +36,22 @@ function brandConfig(overrideSupportEmail?: string | null): BrandConfig {
   };
 }
 
+function envAdminEmails() {
+  return (process.env.ADMIN_NOTIFY_EMAILS || process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean);
+}
+
+function approvalAdminRecipient() {
+  return (process.env.APPROVAL_ADMIN_EMAIL || "admin@biome-aura.com").trim();
+}
+
+function approvalAdminCc() {
+  const to = approvalAdminRecipient().toLowerCase();
+  return Array.from(new Set(envAdminEmails())).filter((email) => email.toLowerCase() !== to);
+}
+
 export async function sendVerificationEmail(
   to: string,
   kind: "approved" | "rejected",
@@ -47,12 +63,18 @@ export async function sendVerificationEmail(
   const rendered =
     kind === "approved" ? renderApprovedEmail(brand, ctx) : renderRejectedEmail(brand, ctx);
   await sendRendered(to, rendered, `verification-${kind}`);
+  if (kind === "approved") {
+    await sendRendered(approvalAdminRecipient(), rendered, "verification-approved-admin-copy", {
+      cc: approvalAdminCc(),
+    });
+  }
 }
 
 async function sendRendered(
   to: string,
   rendered: { subject: string; html: string; text: string },
-  logTag: string
+  logTag: string,
+  options: { cc?: string[] } = {}
 ): Promise<EmailSendResult> {
   if (!to) return { ok: false, transport: "none", error: "Missing recipient" };
 
@@ -64,6 +86,7 @@ async function sendRendered(
     try {
       const result = await sendGmail({
         to,
+        cc: options.cc,
         subject: rendered.subject,
         html: rendered.html,
         text: rendered.text,
@@ -71,7 +94,8 @@ async function sendRendered(
         replyTo,
       });
       if (result.ok) {
-        console.log(`[email] sent via Gmail OAuth (${gmailConn.email}) to ${to} [${logTag}]`);
+        const ccText = options.cc?.length ? ` cc=${options.cc.join(",")}` : "";
+        console.log(`[email] sent via Gmail OAuth (${gmailConn.email}) to ${to}${ccText} [${logTag}]`);
         return { ok: true, transport: "gmail", fromEmail: gmailConn.email };
       }
       console.error("[email] Gmail connected but sendGmail returned false", {
@@ -110,6 +134,9 @@ export async function sendContentApprovalEmail(
   const brand = brandConfig(gmailConn?.email);
   const rendered = renderContentApprovedEmail(brand, ctx);
   await sendRendered(to, rendered, "content-approved");
+  await sendRendered(approvalAdminRecipient(), rendered, "content-approved-admin-copy", {
+    cc: approvalAdminCc(),
+  });
 }
 
 export async function sendBoxApprovalEmail(
@@ -121,6 +148,9 @@ export async function sendBoxApprovalEmail(
   const brand = brandConfig(gmailConn?.email);
   const rendered = renderBoxApprovedEmail(brand, ctx);
   await sendRendered(to, rendered, "box-approved");
+  await sendRendered(approvalAdminRecipient(), rendered, "box-approved-admin-copy", {
+    cc: approvalAdminCc(),
+  });
 }
 
 export async function sendContentFinalizedEmail(
@@ -158,6 +188,7 @@ export async function sendPasswordResetOtpEmail(
 
 export async function sendRawEmail(opts: {
   to: string;
+  cc?: string[];
   subject: string;
   html: string;
   text: string;
@@ -170,6 +201,7 @@ export async function sendRawEmail(opts: {
     try {
       const result = await sendGmail({
         to: opts.to,
+        cc: opts.cc,
         subject: opts.subject,
         html: opts.html,
         text: opts.text,

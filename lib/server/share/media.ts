@@ -20,12 +20,12 @@ let cachedFfmpegPath: string | null = null;
 function getFfmpegPath(): string {
   if (cachedFfmpegPath) return cachedFfmpegPath;
 
-  const platformPackage = `@ffmpeg-installer/${process.platform}-${process.arch}`;
-  const binaryName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
-
   try {
-    const packageJsonPath = require.resolve(`${platformPackage}/package.json`);
-    const ffmpegPath = path.join(path.dirname(packageJsonPath), binaryName);
+    const ffmpegInstaller = require("@ffmpeg-installer/ffmpeg") as { path?: unknown };
+    const ffmpegPath = ffmpegInstaller.path;
+    if (typeof ffmpegPath !== "string" || !ffmpegPath) {
+      throw new Error("Package did not expose a valid ffmpeg path");
+    }
     if (!fs.existsSync(ffmpegPath)) {
       throw new Error(`Missing ffmpeg binary at ${ffmpegPath}`);
     }
@@ -33,7 +33,7 @@ function getFfmpegPath(): string {
     return ffmpegPath;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Unable to resolve ffmpeg for ${process.platform}-${process.arch}: ${message}`);
+    throw new Error(`Unable to resolve ffmpeg from @ffmpeg-installer/ffmpeg: ${message}`);
   }
 }
 

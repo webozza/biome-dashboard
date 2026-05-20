@@ -159,6 +159,22 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           docPath: postDocPath,
           requestDocPath,
         });
+
+        await notifyUser(existing.userId, {
+          type: "bmid_content_approved",
+          title: "Your BMID content was approved",
+          body: existing.postTitle
+            ? `Your post "${existing.postTitle}" was approved. Voting is now open.`
+            : "Your post was approved. Voting is now open.",
+          bmidRequestId: id,
+          bmidSource: "content",
+          bmidDecision: "accepted",
+          fromUid: "admin",
+          authorId: existing.userId,
+          postId,
+          docPath: postDocPath,
+          requestDocPath,
+        });
       }
 
       // Email owner that admin approved + voting opened.

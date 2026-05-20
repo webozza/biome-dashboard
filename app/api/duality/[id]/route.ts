@@ -6,6 +6,11 @@ import type { ContentRequestDoc, DualityRequestDoc } from "@/lib/server/bmid";
 import { getDoc, updateDoc } from "@/lib/server/firestore";
 import { error, json } from "@/lib/server/response";
 import { sendContentApprovalEmail } from "@/lib/server/email/transport";
+import {
+  buildNotificationRequestDocPath,
+  buildUserPostDocPath,
+  notifyUser,
+} from "@/lib/server/notifications";
 
 type UserEmailDoc = { email?: string | null; name?: string | null; displayName?: string | null };
 
@@ -87,6 +92,25 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       }
 
       const ownerUser = await getDoc<UserEmailDoc>("users", duality.ownerId).catch(() => null);
+      const postId = content?.postId ?? null;
+      const postDocPath = buildUserPostDocPath(duality.ownerId, postId);
+      const requestDocPath = buildNotificationRequestDocPath("content", id);
+      await notifyUser(duality.ownerId, {
+        type: "bmid_content_approved",
+        title: "Your BMID content was approved",
+        body: content?.postTitle
+          ? `Your post "${content.postTitle}" was approved. Voting is now open.`
+          : "Your post was approved. Voting is now open.",
+        bmidRequestId: id,
+        bmidSource: "content",
+        bmidDecision: "accepted",
+        fromUid: "admin",
+        authorId: duality.ownerId,
+        postId,
+        docPath: postDocPath,
+        requestDocPath,
+      });
+
       if (ownerUser?.email) {
         void sendContentApprovalEmail(ownerUser.email, {
           ownerName: duality.ownerName || ownerUser.name || ownerUser.displayName || "there",

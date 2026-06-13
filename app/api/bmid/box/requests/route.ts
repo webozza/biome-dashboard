@@ -6,6 +6,7 @@ import { buildDualityRequestFromBox } from "@/lib/server/bmid";
 import { ensureBmidBoxSeeded, getBmidBoxSettings } from "@/lib/server/bmid-box";
 import { error, json } from "@/lib/server/response";
 import { notifyAdminRequestCreated } from "@/lib/server/admin-request-email";
+import type { BmidBoxContentType, BmidBoxPlatform } from "@/lib/data/bmid-box";
 
 type UserDoc = {
   id?: string;
@@ -23,6 +24,45 @@ function userName(user: UserDoc, fallback = "Unknown user") {
 function isVerifiedUser(user: UserDoc | null | undefined) {
   if (!user) return false;
   return user.verified === true || typeof user.bmidNumber === "string";
+}
+
+function clean(value: unknown) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "null" || trimmed === "undefined") return "";
+  return trimmed;
+}
+
+function sanitizePreviewData(value: unknown) {
+  const input = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const contentType = clean(input.contentType);
+  const allowedContentTypes: BmidBoxContentType[] = ["video", "photo", "image", "post", "link"];
+  return {
+    title: clean(input.title),
+    caption: clean(input.caption),
+    description: clean(input.description),
+    thumbnailUrl: clean(input.thumbnailUrl),
+    embedEnabled: input.embedEnabled !== false,
+    contentType: allowedContentTypes.includes(contentType as BmidBoxContentType)
+      ? (contentType as BmidBoxContentType)
+      : "post",
+  };
+}
+
+function sanitizeSocialPreview(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const input = value as Record<string, unknown>;
+  const allowedPlatforms: BmidBoxPlatform[] = ["instagram", "tiktok", "youtube", "facebook", "x", "generic"];
+  const platform = clean(input.platform);
+  return {
+    platform: allowedPlatforms.includes(platform as BmidBoxPlatform) ? platform : clean(input.platform),
+    type: clean(input.type),
+    authorName: clean(input.authorName),
+    canonicalUrl: clean(input.canonicalUrl),
+    embedUrl: clean(input.embedUrl),
+    externalUrl: clean(input.externalUrl),
+    status: clean(input.status),
+  };
 }
 
 export const dynamic = "force-dynamic";
@@ -152,15 +192,8 @@ export async function POST(req: NextRequest) {
       type,
       sourcePlatform,
       sourceUrl,
-      previewData:
-        (body.previewData as Record<string, unknown>) || {
-          title: "New BMID Box request",
-          caption: "",
-          description: "",
-          thumbnailUrl: "",
-          embedEnabled: true,
-          contentType: "post",
-        },
+      previewData: sanitizePreviewData(body.previewData),
+      socialPreview: sanitizeSocialPreview(body.socialPreview),
       currentStatus: type === "duality" ? "pending_tagged_user" : "pending_admin_review",
       votingStatus: null,
       acceptCount: 0,

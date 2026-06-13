@@ -2,16 +2,20 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Box,
   CheckCircle,
   Clock,
+  ExternalLink,
   GitBranch,
+  Image as ImageIcon,
   Loader2,
   Minus,
+  Play,
   Plus,
+  RefreshCw,
   ShieldX,
   ThumbsDown,
   ThumbsUp,
@@ -30,8 +34,10 @@ import { UserPicker, type UserPickerOption } from "@/components/ui/user-picker";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import {
   createBmidBoxRequest,
+  fetchBmidSocialPreview,
   fetchBmidBoxRequests,
   postBmidBoxAction,
+  type BmidSocialPreviewData,
 } from "@/lib/bmid-box-client";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { formatDate } from "@/lib/format";
@@ -41,6 +47,8 @@ const platformTone: Record<string, string> = {
   tiktok: "bg-white/5 text-white border-white/10",
   youtube: "bg-red-500/10 text-red-400 border-red-500/20",
   facebook: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  x: "bg-sky-500/10 text-sky-300 border-sky-500/20",
+  generic: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
 };
 
 const statusOptions = [
@@ -64,7 +72,12 @@ const platformOptions = [
   { value: "tiktok", label: "TikTok" },
   { value: "youtube", label: "YouTube" },
   { value: "facebook", label: "Facebook" },
+  { value: "x", label: "X / Twitter" },
+  { value: "generic", label: "Generic Link" },
 ];
+
+type PreviewState = "idle" | "loading" | "ready" | "unavailable" | "failed";
+type DirtyField = "platform" | "sourceUrl" | "title" | "caption" | "description" | "thumbnailUrl" | "contentType";
 
 type CreateFormState = {
   owner: UserPickerOption | null;
@@ -76,7 +89,7 @@ type CreateFormState = {
   caption: string;
   description: string;
   thumbnailUrl: string;
-  contentType: "video" | "photo" | "post";
+  contentType: "video" | "photo" | "image" | "post" | "link";
 };
 
 const emptyForm: CreateFormState = {
@@ -92,6 +105,78 @@ const emptyForm: CreateFormState = {
   contentType: "post",
 };
 
+function validText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.trim() !== "null" && value.trim() !== "undefined";
+}
+
+function isValidHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function normalizePlatform(value: unknown): BmidBoxPlatform | null {
+  if (!validText(value)) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "twitter") return "x";
+  if (["instagram", "tiktok", "youtube", "facebook", "x", "generic"].includes(normalized)) {
+    return normalized as BmidBoxPlatform;
+  }
+  return null;
+}
+
+function detectPlatformFromUrl(value: string): BmidBoxPlatform | null {
+  try {
+    const hostname = new URL(value).hostname.replace(/^www\./, "").toLowerCase();
+    if (hostname.includes("instagram.com")) return "instagram";
+    if (hostname.includes("tiktok.com")) return "tiktok";
+    if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) return "youtube";
+    if (hostname.includes("facebook.com") || hostname.includes("fb.watch")) return "facebook";
+    if (hostname.includes("twitter.com") || hostname.includes("x.com")) return "x";
+    return "generic";
+  } catch {
+    return null;
+  }
+}
+
+function normalizeContentType(value: unknown): CreateFormState["contentType"] | null {
+  if (!validText(value)) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "photo") return "image";
+  if (["video", "image", "post", "link"].includes(normalized)) return normalized as CreateFormState["contentType"];
+  return null;
+}
+
+function previewErrorMessage(err: unknown) {
+  const message = err instanceof Error ? err.message : "";
+  if (message.includes("invalid_social_url")) return "Invalid social media URL.";
+  if (message.includes("preview_timeout")) return "Preview request timed out.";
+  if (message.includes("unsupported")) return "This platform is not currently supported.";
+  if (message.includes("preview_unavailable")) return "The platform did not return preview information.";
+  return "Preview could not be loaded. You can still enter the information manually.";
+}
+
+function setDirty(current: Set<DirtyField>, field: DirtyField) {
+  const next = new Set(current);
+  next.add(field);
+  return next;
+}
+
+function platformLabel(value: string | undefined) {
+  const option = platformOptions.find((item) => item.value === value);
+  return option?.label || value || "Social";
+}
+
+function contentTypeLabel(value: string | undefined) {
+  if (value === "image" || value === "photo") return "Image";
+  if (value === "video") return "Video";
+  if (value === "link") return "Link";
+  return "Post";
+}
+
 export function RequestsTab() {
   const searchParams = useSearchParams();
   const initialStatus = searchParams.get("status");
@@ -102,11 +187,27 @@ export function RequestsTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<CreateFormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [previewState, setPreviewState] = useState<PreviewState>("idle");
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [socialPreview, setSocialPreview] = useState<BmidSocialPreviewData | null>(null);
+  const [dirtyFields, setDirtyFields] = useState<Set<DirtyField>>(() => new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const lastFetchedUrlRef = useRef("");
+  const activePreviewRequestRef = useRef(0);
   const deferredSearch = useDeferredValue(searchQuery);
   const pageSize = 10;
+
+  const resetCreateForm = useCallback(() => {
+    setForm(emptyForm);
+    setFormError(null);
+    setPreviewState("idle");
+    setPreviewError(null);
+    setSocialPreview(null);
+    setDirtyFields(new Set());
+    lastFetchedUrlRef.current = "";
+  }, []);
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -138,11 +239,84 @@ export function RequestsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
       setShowCreate(false);
-      setForm(emptyForm);
-      setFormError(null);
+      resetCreateForm();
     },
     onError: (err: unknown) => setFormError((err as Error).message),
   });
+
+  const applyPreviewToForm = useCallback((preview: BmidSocialPreviewData, originalUrl: string) => {
+    setForm((current) => {
+      const next = { ...current };
+      const platform = normalizePlatform(preview.platform);
+      const contentType = normalizeContentType(preview.type);
+      const sourceUrl = validText(preview.canonicalUrl) ? preview.canonicalUrl.trim() : originalUrl;
+
+      if (platform) next.platform = platform;
+      if (sourceUrl && !dirtyFields.has("sourceUrl")) next.sourceUrl = sourceUrl;
+      if (validText(preview.title) && !dirtyFields.has("title")) next.title = preview.title!.trim();
+      if (validText(preview.caption) && !dirtyFields.has("caption")) next.caption = preview.caption!.trim();
+      if (validText(preview.description) && !dirtyFields.has("description")) next.description = preview.description!.trim();
+      if (validText(preview.thumbnailUrl) && !dirtyFields.has("thumbnailUrl")) next.thumbnailUrl = preview.thumbnailUrl!.trim();
+      if (contentType && !dirtyFields.has("contentType")) next.contentType = contentType;
+
+      return next;
+    });
+  }, [dirtyFields]);
+
+  const loadSocialPreview = useCallback(async (url: string, options: { force?: boolean } = {}) => {
+    const trimmed = url.trim();
+    if (!trimmed) {
+      setPreviewState("idle");
+      setPreviewError(null);
+      setSocialPreview(null);
+      return;
+    }
+    if (!isValidHttpUrl(trimmed)) {
+      setPreviewState("failed");
+      setPreviewError("Invalid social media URL.");
+      setSocialPreview(null);
+      return;
+    }
+    if (!apiToken) return;
+    if (!options.force && lastFetchedUrlRef.current === trimmed) return;
+
+    const requestId = activePreviewRequestRef.current + 1;
+    activePreviewRequestRef.current = requestId;
+    lastFetchedUrlRef.current = trimmed;
+    setPreviewState("loading");
+    setPreviewError(null);
+    setSocialPreview(null);
+
+    try {
+      const result = await fetchBmidSocialPreview(apiToken, trimmed);
+      if (activePreviewRequestRef.current !== requestId) return;
+      const data = result.data || {};
+      if (validText(data.canonicalUrl)) lastFetchedUrlRef.current = data.canonicalUrl.trim();
+      setSocialPreview(data);
+      if (data.status === "unavailable") {
+        setPreviewState("unavailable");
+        setPreviewError("This post may be private or unavailable.");
+      } else {
+        setPreviewState("ready");
+        applyPreviewToForm(data, trimmed);
+      }
+    } catch (err) {
+      if (activePreviewRequestRef.current !== requestId) return;
+      setPreviewState("failed");
+      setSocialPreview(null);
+      setPreviewError(previewErrorMessage(err));
+    }
+  }, [apiToken, applyPreviewToForm]);
+
+  useEffect(() => {
+    if (!showCreate) return;
+    const url = form.sourceUrl.trim();
+    if (!url) return;
+    const timer = window.setTimeout(() => {
+      void loadSocialPreview(url);
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [form.sourceUrl, loadSocialPreview, showCreate]);
 
   function submitCreate() {
     setFormError(null);
@@ -158,15 +332,24 @@ export function RequestsTab() {
       sourcePlatform: form.platform,
       actorName: "Admin (test)",
       previewData: {
-        title: form.title.trim() || "New BMID Box request",
+        title: form.title.trim(),
         caption: form.caption.trim(),
         description: form.description.trim(),
-        thumbnailUrl:
-          form.thumbnailUrl.trim() ||
-          "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=900&q=80",
+        thumbnailUrl: form.thumbnailUrl.trim(),
         embedEnabled: true,
         contentType: form.contentType,
       },
+      socialPreview: socialPreview
+        ? {
+            platform: socialPreview.platform,
+            type: socialPreview.type,
+            authorName: socialPreview.authorName,
+            canonicalUrl: socialPreview.canonicalUrl,
+            embedUrl: socialPreview.embedUrl,
+            externalUrl: socialPreview.externalUrl,
+            status: socialPreview.status,
+          }
+        : null,
     };
 
     if (form.type === "duality" && form.tagged) {
@@ -360,8 +543,7 @@ export function RequestsTab() {
         </div>
         <button
           onClick={() => {
-            setForm(emptyForm);
-            setFormError(null);
+            resetCreateForm();
             setShowCreate(true);
           }}
           className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-emerald-600"
@@ -494,13 +676,18 @@ export function RequestsTab() {
                   <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-muted">Platform</label>
                   <select
                     value={form.platform}
-                    onChange={(event) => setForm((current) => ({ ...current, platform: event.target.value as BmidBoxPlatform }))}
+                    onChange={(event) => {
+                      setDirtyFields((current) => setDirty(current, "platform"));
+                      setForm((current) => ({ ...current, platform: event.target.value as BmidBoxPlatform }));
+                    }}
                     className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-main outline-none focus:border-white/20"
                   >
                     <option value="instagram">Instagram</option>
                     <option value="tiktok">TikTok</option>
                     <option value="youtube">YouTube</option>
                     <option value="facebook">Facebook</option>
+                    <option value="x">X / Twitter</option>
+                    <option value="generic">Generic Link</option>
                   </select>
                 </div>
               </div>
@@ -529,20 +716,123 @@ export function RequestsTab() {
 
               <div>
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-muted">Source URL</label>
-                <input
-                  value={form.sourceUrl}
-                  onChange={(event) => setForm((current) => ({ ...current, sourceUrl: event.target.value }))}
-                  placeholder="https://instagram.com/p/..."
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-main outline-none focus:border-white/20"
-                />
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <div className="relative flex-1">
+                    <input
+                      value={form.sourceUrl}
+                      onChange={(event) => {
+                        const nextUrl = event.target.value;
+                        const trimmed = nextUrl.trim();
+                        const detectedPlatform = detectPlatformFromUrl(trimmed);
+                        setForm((current) => ({
+                          ...current,
+                          sourceUrl: nextUrl,
+                          platform: detectedPlatform || current.platform,
+                        }));
+                        if (!trimmed) {
+                          setPreviewState("idle");
+                          setPreviewError(null);
+                          setSocialPreview(null);
+                          lastFetchedUrlRef.current = "";
+                        } else if (lastFetchedUrlRef.current && lastFetchedUrlRef.current !== trimmed) {
+                          setPreviewState("idle");
+                          setPreviewError(null);
+                          setSocialPreview(null);
+                        }
+                      }}
+                      onBlur={() => void loadSocialPreview(form.sourceUrl)}
+                      placeholder="https://instagram.com/p/..."
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 pr-28 text-sm text-main outline-none focus:border-white/20"
+                    />
+                    {previewState === "loading" ? (
+                      <span className="absolute right-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-primary">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Loading
+                      </span>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadSocialPreview(form.sourceUrl, { force: true })}
+                    disabled={!form.sourceUrl.trim() || previewState === "loading"}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.16em] text-muted transition hover:border-primary/30 hover:text-primary disabled:opacity-50"
+                  >
+                    {previewState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    Refresh Preview
+                  </button>
+                </div>
+                {previewState === "loading" ? (
+                  <p className="mt-2 text-xs font-medium text-muted">Loading social media data...</p>
+                ) : null}
+                {previewState === "failed" && previewError ? (
+                  <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                    {previewError}
+                  </div>
+                ) : null}
+                {previewState === "unavailable" ? (
+                  <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-muted">
+                    {previewError || "The platform did not return preview information."} You can still enter the information manually.
+                  </div>
+                ) : null}
               </div>
+
+              {previewState === "ready" && socialPreview ? (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-muted">Social Media Preview</p>
+                  <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
+                    <a
+                      href={socialPreview.externalUrl || socialPreview.canonicalUrl || form.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="group relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/20"
+                    >
+                      {socialPreview.thumbnailUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={socialPreview.thumbnailUrl} alt={socialPreview.title || "Social media preview"} className="h-full w-full object-cover" />
+                      ) : (
+                        <ImageIcon className="h-8 w-8 text-muted" />
+                      )}
+                      {normalizeContentType(socialPreview.type) === "video" ? (
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+                          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/70 text-white">
+                            <Play className="ml-0.5 h-5 w-5 fill-current" />
+                          </span>
+                        </span>
+                      ) : null}
+                    </a>
+                    <div className="min-w-0 space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">
+                        {platformLabel(socialPreview.platform)} · {contentTypeLabel(socialPreview.type)}
+                      </p>
+                      <p className="line-clamp-2 text-sm font-extrabold text-main">
+                        {socialPreview.title || "Untitled social post"}
+                      </p>
+                      {socialPreview.authorName ? (
+                        <p className="text-xs font-medium text-muted">{socialPreview.authorName}</p>
+                      ) : null}
+                      <a
+                        href={socialPreview.externalUrl || socialPreview.canonicalUrl || form.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-primary"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open Original Post
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-muted">Title</label>
                   <input
                     value={form.title}
-                    onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                    onChange={(event) => {
+                      setDirtyFields((current) => setDirty(current, "title"));
+                      setForm((current) => ({ ...current, title: event.target.value }));
+                    }}
                     placeholder="Studio clip"
                     className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-main outline-none focus:border-white/20"
                   />
@@ -551,14 +841,16 @@ export function RequestsTab() {
                   <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-muted">Content Type</label>
                   <select
                     value={form.contentType}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, contentType: event.target.value as CreateFormState["contentType"] }))
-                    }
+                    onChange={(event) => {
+                      setDirtyFields((current) => setDirty(current, "contentType"));
+                      setForm((current) => ({ ...current, contentType: event.target.value as CreateFormState["contentType"] }));
+                    }}
                     className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-main outline-none focus:border-white/20"
                   >
                     <option value="video">Video</option>
-                    <option value="photo">Photo</option>
+                    <option value="image">Image</option>
                     <option value="post">Post</option>
+                    <option value="link">Link</option>
                   </select>
                 </div>
               </div>
@@ -567,7 +859,10 @@ export function RequestsTab() {
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-muted">Caption</label>
                 <input
                   value={form.caption}
-                  onChange={(event) => setForm((current) => ({ ...current, caption: event.target.value }))}
+                  onChange={(event) => {
+                    setDirtyFields((current) => setDirty(current, "caption"));
+                    setForm((current) => ({ ...current, caption: event.target.value }));
+                  }}
                   className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-main outline-none focus:border-white/20"
                 />
               </div>
@@ -576,7 +871,10 @@ export function RequestsTab() {
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-muted">Description</label>
                 <textarea
                   value={form.description}
-                  onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                  onChange={(event) => {
+                    setDirtyFields((current) => setDirty(current, "description"));
+                    setForm((current) => ({ ...current, description: event.target.value }));
+                  }}
                   rows={3}
                   className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-main outline-none focus:border-white/20"
                 />
@@ -586,7 +884,10 @@ export function RequestsTab() {
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-muted">Thumbnail URL (optional)</label>
                 <input
                   value={form.thumbnailUrl}
-                  onChange={(event) => setForm((current) => ({ ...current, thumbnailUrl: event.target.value }))}
+                  onChange={(event) => {
+                    setDirtyFields((current) => setDirty(current, "thumbnailUrl"));
+                    setForm((current) => ({ ...current, thumbnailUrl: event.target.value }));
+                  }}
                   className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-main outline-none focus:border-white/20"
                 />
               </div>
@@ -605,7 +906,7 @@ export function RequestsTab() {
                 </button>
                 <button
                   onClick={submitCreate}
-                  disabled={createMutation.isPending}
+                  disabled={createMutation.isPending || previewState === "loading"}
                   className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-emerald-600 disabled:opacity-60"
                 >
                   {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}

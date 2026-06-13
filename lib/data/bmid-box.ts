@@ -1,5 +1,6 @@
 export type BmidBoxRequestType = "own" | "duality";
-export type BmidBoxPlatform = "instagram" | "tiktok" | "youtube" | "facebook";
+export type BmidBoxPlatform = "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "generic";
+export type BmidBoxContentType = "video" | "photo" | "image" | "post" | "link";
 export type BmidBoxRequestStatus =
   | "draft"
   | "submitted"
@@ -57,7 +58,22 @@ export interface BmidBoxPreviewData {
   description: string;
   thumbnailUrl: string;
   embedEnabled: boolean;
-  contentType: "video" | "photo" | "post";
+  contentType: BmidBoxContentType;
+}
+
+export interface BmidBoxSocialPreview {
+  platform?: BmidBoxPlatform | string;
+  type?: BmidBoxContentType | "image" | string;
+  title?: string;
+  caption?: string;
+  description?: string;
+  authorName?: string;
+  thumbnailUrl?: string;
+  videoUrl?: string | null;
+  embedUrl?: string | null;
+  canonicalUrl?: string;
+  externalUrl?: string;
+  status?: "ready" | "unavailable" | "failed" | string;
 }
 
 export interface BmidBoxVerificationChecks {
@@ -91,6 +107,7 @@ export interface BmidBoxRequest {
   sourcePlatform: BmidBoxPlatform;
   sourceUrl: string;
   previewData: BmidBoxPreviewData;
+  socialPreview?: BmidBoxSocialPreview | null;
   currentStatus: BmidBoxRequestStatus;
   votingStatus: BmidBoxVotingStatus | null;
   acceptCount: number;
@@ -127,11 +144,11 @@ export interface BmidBoxSettings {
   autoCloseVotingOnExpiry: boolean;
   minimumVotesRequired: number;
   adminCanFinalize: boolean;
-  supportedContentTypes: Array<"video" | "photo" | "post">;
+  supportedContentTypes: BmidBoxContentType[];
 }
 
 export const bmidBoxSettings: BmidBoxSettings = {
-  allowedPlatforms: ["instagram", "tiktok", "youtube", "facebook"],
+  allowedPlatforms: ["instagram", "tiktok", "youtube", "facebook", "x", "generic"],
   embedPreviewEnabled: true,
   maxPendingRequestsPerUser: 3,
   duplicateUrlRule: "block_exact_match",
@@ -140,5 +157,5 @@ export const bmidBoxSettings: BmidBoxSettings = {
   autoCloseVotingOnExpiry: true,
   minimumVotesRequired: 25,
   adminCanFinalize: true,
-  supportedContentTypes: ["video", "photo", "post"],
+  supportedContentTypes: ["video", "photo", "image", "post", "link"],
 };

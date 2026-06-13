@@ -33,6 +33,21 @@ export type BmidBoxAuditRow = {
   createdAt: string;
 };
 
+export type BmidSocialPreviewData = {
+  platform?: string;
+  type?: "video" | "image" | "post" | "link" | string;
+  title?: string;
+  caption?: string;
+  description?: string;
+  authorName?: string;
+  thumbnailUrl?: string;
+  videoUrl?: string | null;
+  embedUrl?: string | null;
+  canonicalUrl?: string;
+  externalUrl?: string;
+  status?: "ready" | "unavailable" | "failed" | string;
+};
+
 export async function fetchBmidBoxRequests(apiToken: string, params?: URLSearchParams) {
   const resp = await fetch(`/api/bmid-box/requests${params ? `?${params.toString()}` : ""}`, {
     headers: { authorization: `Bearer ${apiToken}` },
@@ -76,6 +91,18 @@ export async function createBmidBoxRequest(
     body: JSON.stringify(body),
   });
   return readJson<{ id: string }>(resp);
+}
+
+export async function fetchBmidSocialPreview(apiToken: string, url: string) {
+  const resp = await fetch("/api/admin/bmid/social-preview", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ url }),
+  });
+  return readJson<{ success: boolean; data: BmidSocialPreviewData }>(resp);
 }
 
 export async function seedBmidBoxRequestsApi(apiToken: string, force = false) {

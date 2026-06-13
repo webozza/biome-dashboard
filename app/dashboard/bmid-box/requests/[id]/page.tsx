@@ -7,7 +7,9 @@ import {
   ArrowLeft,
   CheckCircle2,
   ExternalLink,
+  Image as ImageIcon,
   Loader2,
+  Play,
   ThumbsDown,
   ThumbsUp,
   Trash2,
@@ -252,12 +254,25 @@ export default function BmidBoxRequestDetailPage() {
         <div className="space-y-6">
           <section className="card overflow-hidden p-0">
             <div className="grid gap-0 lg:grid-cols-[280px_1fr]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={request.previewData.thumbnailUrl}
-                alt={request.previewData.title}
-                className="h-full min-h-[200px] w-full object-cover"
-              />
+              <div className="relative flex min-h-[200px] items-center justify-center bg-black/20">
+                {request.previewData.thumbnailUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={request.previewData.thumbnailUrl}
+                    alt={request.previewData.title || "BMID Box preview"}
+                    className="h-full min-h-[200px] w-full object-cover"
+                  />
+                ) : (
+                  <ImageIcon className="h-10 w-10 text-muted" />
+                )}
+                {request.previewData.contentType === "video" ? (
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/70 text-white">
+                      <Play className="ml-0.5 h-5 w-5 fill-current" />
+                    </span>
+                  </span>
+                ) : null}
+              </div>
               <div className="space-y-3 p-5">
                 <div className="flex items-center gap-2">
                   <StatusBadge status={request.sourcePlatform} size="xs" />

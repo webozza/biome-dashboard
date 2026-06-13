@@ -103,7 +103,20 @@ async function backfillRequestSnapshots() {
 
 async function ensureSettingsSeeded() {
   const existing = await getDoc<BmidBoxSettings>(SETTINGS_COLLECTION, SETTINGS_DOC_ID);
-  if (existing) return;
+  if (existing) {
+    const allowedPlatforms = Array.from(new Set([...(existing.allowedPlatforms || []), ...seededSettings.allowedPlatforms]));
+    const supportedContentTypes = Array.from(new Set([...(existing.supportedContentTypes || []), ...seededSettings.supportedContentTypes]));
+    if (
+      allowedPlatforms.length !== (existing.allowedPlatforms || []).length ||
+      supportedContentTypes.length !== (existing.supportedContentTypes || []).length
+    ) {
+      await updateDoc(SETTINGS_COLLECTION, SETTINGS_DOC_ID, {
+        allowedPlatforms,
+        supportedContentTypes,
+      });
+    }
+    return;
+  }
   await createDoc(
     SETTINGS_COLLECTION,
     seededSettings as unknown as Record<string, unknown>,

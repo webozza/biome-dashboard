@@ -7,8 +7,8 @@ import type { BmidBoxSettings } from "@/lib/data/bmid-box";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { patchBmidBoxSettingsRequest, readJson } from "@/lib/bmid-box-client";
 
-const platforms = ["instagram", "tiktok", "youtube", "facebook"] as const;
-const contentTypes = ["video", "photo", "post"] as const;
+const platforms = ["instagram", "tiktok", "youtube", "facebook", "x", "generic"] as const;
+const contentTypes = ["video", "image", "post", "link"] as const;
 
 export function SettingsTab() {
   const apiToken = useAuthStore((state) => state.apiToken);

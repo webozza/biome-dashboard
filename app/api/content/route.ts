@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { guard } from "@/lib/server/guard";
 import { createDoc, getDoc } from "@/lib/server/firestore";
 import { buildDualityRequestFromContent } from "@/lib/server/bmid";
+import type { TaggedUserState } from "@/lib/server/bmid";
 import { db } from "@/lib/server/firebase";
 import { error, json, parsePagination } from "@/lib/server/response";
 import { contentRequests } from "@/lib/data/mock-data";
@@ -29,6 +30,27 @@ type ContentListDoc = {
 
 function pickName(user: UserDoc, fallback: string) {
   return user.name || user.displayName || user.email || fallback;
+}
+
+function parseTaggedUserIds(body: Record<string, unknown>) {
+  const raw =
+    Array.isArray(body.taggedUserIds)
+      ? body.taggedUserIds
+      : Array.isArray(body.taggedUsers)
+        ? body.taggedUsers.map((user) =>
+            typeof user === "string"
+              ? user
+              : user && typeof user === "object" && "id" in user
+                ? (user as { id?: unknown }).id
+                : user && typeof user === "object" && "userId" in user
+                  ? (user as { userId?: unknown }).userId
+                  : null
+          )
+        : typeof body.taggedUserId === "string"
+          ? [body.taggedUserId]
+          : [];
+
+  return [...new Set(raw.filter((id): id is string => typeof id === "string" && Boolean(id.trim())).map((id) => id.trim()))];
 }
 
 function normalizedParam(url: URL, key: string) {
@@ -109,26 +131,26 @@ export async function POST(req: NextRequest) {
   const owner = await getDoc<UserDoc>("users", userId);
   if (!owner) return error("owner_not_found", 404);
 
-  const taggedUserId =
-    type === "own"
-      ? userId
-      : typeof body.taggedUserId === "string"
-        ? body.taggedUserId
-        : "";
-  const clientTaggedName =
-    type === "own"
-      ? clientUserName
-      : typeof body.taggedUserName === "string"
-        ? body.taggedUserName
-        : "";
-
-  if (!taggedUserId || !clientTaggedName) return error("missing_tagged_user", 400);
-
-  const tagged = type === "own" ? owner : await getDoc<UserDoc>("users", taggedUserId);
-  if (!tagged) return error("tagged_user_not_found", 404);
-
   const ownerName = pickName(owner, clientUserName);
-  const taggedName = type === "own" ? ownerName : pickName(tagged, clientTaggedName);
+  const taggedUserIds = type === "own" ? [userId] : parseTaggedUserIds(body).filter((id) => id !== userId);
+  if (type === "duality" && taggedUserIds.length === 0) return error("missing_tagged_user", 400);
+  if (type === "duality" && taggedUserIds.length !== parseTaggedUserIds(body).length) {
+    return error("tagged_user_same_as_owner", 400);
+  }
+
+  const taggedUsers: TaggedUserState[] = [];
+  for (const taggedUserId of taggedUserIds) {
+    const tagged = type === "own" ? owner : await getDoc<UserDoc>("users", taggedUserId);
+    if (!tagged) return error("tagged_user_not_found", 404, { taggedUserId });
+    taggedUsers.push({
+      userId: taggedUserId,
+      name: type === "own" ? ownerName : pickName(tagged, "Tagged User"),
+      action: type === "own" ? "accepted" : "pending",
+    });
+  }
+
+  const primaryTagged = taggedUsers[0];
+  const taggedNames = taggedUsers.map((user) => user.name).join(", ");
 
   const taggedUserAction = type === "own" ? "accepted" : "pending";
   const status = type === "own" ? "pending" : "waiting_tagged";
@@ -141,9 +163,10 @@ export async function POST(req: NextRequest) {
       bmidNumber: owner.bmidNumber ?? null,
       type,
       status,
-      taggedUserId,
-      taggedUserName: taggedName,
+      taggedUserId: primaryTagged.userId,
+      taggedUserName: taggedNames,
       taggedUserAction,
+      taggedUsers,
       reviewedBy: null,
       rejectionReason: null,
       adminNotes: Array.isArray(body.adminNotes) ? body.adminNotes : [],
@@ -160,9 +183,10 @@ export async function POST(req: NextRequest) {
       await buildDualityRequestFromContent(id, {
         ownerId: userId,
         ownerName,
-        taggedUserId,
-        taggedUserName: taggedName,
+        taggedUserId: primaryTagged.userId,
+        taggedUserName: primaryTagged.name,
         taggedUserAction: "pending",
+        taggedUsers,
       });
     }
     const notifyResult = await notifyAdminRequestCreated({

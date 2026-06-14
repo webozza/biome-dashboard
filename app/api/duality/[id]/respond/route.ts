@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { guard } from "@/lib/server/guard";
-import { applyTaggedUserDecision } from "@/lib/server/bmid";
+import { applyTaggedUserDecision, effectiveDualityStatus, userCanRespondToDuality } from "@/lib/server/bmid";
 import type { DualityRequestDoc } from "@/lib/server/bmid";
 import { getDoc } from "@/lib/server/firestore";
 import { error, json } from "@/lib/server/response";
@@ -30,11 +30,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const duality = await getDoc<DualityRequestDoc>("dualityRequests", id);
   if (!duality) return error("not_found", 404);
-  if (duality.taggedUserId !== actorUserId) return error("actor_mismatch", 400);
-  if (duality.status !== "waiting_tagged") return error("not_waiting_tagged", 400);
+  if (!userCanRespondToDuality(duality, actorUserId)) return error("actor_mismatch", 400);
+  if (effectiveDualityStatus(duality) !== "waiting_tagged") {
+    return error("not_waiting_tagged", 400);
+  }
 
   try {
-    await applyTaggedUserDecision(id, duality, actorName, decision);
+    await applyTaggedUserDecision(id, duality, actorName, decision, actorUserId);
     const fresh = await getDoc("dualityRequests", id);
     return json(fresh);
   } catch (e) {

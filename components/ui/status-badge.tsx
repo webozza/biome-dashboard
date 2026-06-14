@@ -74,9 +74,10 @@ const statusConfig: Record<string, Palette> = {
 
 const fallback = GRAY;
 
-export function StatusBadge({ status, size = "sm" }: { status: string; size?: "xs" | "sm" }) {
-  const config = statusConfig[status] || fallback;
-  const label = status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+export function StatusBadge({ status, size = "sm" }: { status?: string | null; size?: "xs" | "sm" }) {
+  const safeStatus = status || "unknown";
+  const config = statusConfig[safeStatus] || fallback;
+  const label = safeStatus.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
     <span

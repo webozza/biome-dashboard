@@ -21,6 +21,7 @@ export type ContentRequestDoc = {
   taggedUserId?: string | null;
   taggedUserName?: string | null;
   taggedUserAction?: "pending" | "accepted" | "declined" | null;
+  taggedUsers?: TaggedUserState[];
   voteAccept?: number;
   voteIgnore?: number;
   voteRefuse?: number;
@@ -37,12 +38,19 @@ export type DualityRequestDoc = {
   taggedUserId: string;
   taggedUserName: string;
   taggedUserAction: "pending" | "accepted" | "declined";
+  taggedUsers?: TaggedUserState[];
   status: "pending" | "approved" | "rejected" | "waiting_tagged" | "cancelled";
   source: "content" | "box";
   decisionHistory: { action: string; by: string; at: string }[];
   timeline: { event: string; at: string }[];
   reviewedBy?: string | null;
   adminNote?: string | null;
+};
+
+export type TaggedUserState = {
+  userId: string;
+  name: string;
+  action: "pending" | "accepted" | "declined";
 };
 
 export type VotingItemDoc = {
@@ -65,6 +73,47 @@ function isoNow() {
 
 function dayStamp() {
   return isoNow().split("T")[0];
+}
+
+export function normalizeTaggedUsers(
+  duality: Pick<DualityRequestDoc, "taggedUserId" | "taggedUserName" | "taggedUserAction"> & {
+    taggedUsers?: TaggedUserState[];
+  }
+): TaggedUserState[] {
+  if (Array.isArray(duality.taggedUsers) && duality.taggedUsers.length > 0) {
+    return duality.taggedUsers
+      .filter((user) => typeof user?.userId === "string" && user.userId)
+      .map((user) => ({
+        userId: user.userId,
+        name: user.name || "Tagged User",
+        action: user.action === "accepted" || user.action === "declined" ? user.action : "pending",
+      }));
+  }
+  return [
+    {
+      userId: duality.taggedUserId,
+      name: duality.taggedUserName || "Tagged User",
+      action: duality.taggedUserAction || "pending",
+    },
+  ].filter((user) => user.userId);
+}
+
+export function userCanRespondToDuality(duality: DualityRequestDoc, userId: string) {
+  return normalizeTaggedUsers(duality).some((user) => user.userId === userId);
+}
+
+export function aggregateTaggedUserStatus(taggedUsers: TaggedUserState[]) {
+  if (taggedUsers.some((user) => user.action === "pending")) return "waiting_tagged";
+  if (taggedUsers.some((user) => user.action === "declined")) return "rejected";
+  if (taggedUsers.length > 0 && taggedUsers.every((user) => user.action === "accepted")) {
+    return "pending";
+  }
+  return "waiting_tagged";
+}
+
+export function effectiveDualityStatus(duality: DualityRequestDoc) {
+  if (duality.status === "approved" || duality.status === "cancelled") return duality.status;
+  return aggregateTaggedUserStatus(normalizeTaggedUsers(duality));
 }
 
 export function computeVotingOutcome(accept: number, ignore: number, refuse: number): VotingOutcome {
@@ -148,15 +197,15 @@ async function buildDualityRequest(
     taggedUserId: string;
     taggedUserName: string;
     taggedUserAction: "pending" | "accepted" | "declined";
+    taggedUsers?: TaggedUserState[];
   }
 ) {
   const at = dayStamp();
-  const status =
-    payload.taggedUserAction === "accepted"
-      ? "pending"
-      : payload.taggedUserAction === "declined"
-        ? "rejected"
-        : "waiting_tagged";
+  const taggedUsers =
+    payload.taggedUsers && payload.taggedUsers.length > 0
+      ? payload.taggedUsers
+      : [{ userId: payload.taggedUserId, name: payload.taggedUserName, action: payload.taggedUserAction }];
+  const status = aggregateTaggedUserStatus(taggedUsers);
 
   await createDoc(
     "dualityRequests",
@@ -166,6 +215,7 @@ async function buildDualityRequest(
       taggedUserId: payload.taggedUserId,
       taggedUserName: payload.taggedUserName,
       taggedUserAction: payload.taggedUserAction,
+      taggedUsers,
       status,
       source,
       reviewedBy: null,
@@ -173,7 +223,7 @@ async function buildDualityRequest(
       decisionHistory: [{ action: "Created", by: payload.ownerName, at }],
       timeline: [
         { event: "Request created", at },
-        ...(payload.taggedUserAction === "pending" ? [{ event: "Tagged user notified", at }] : []),
+        ...(status === "waiting_tagged" ? [{ event: "Tagged users notified", at }] : []),
       ],
     },
     id
@@ -188,6 +238,7 @@ export async function buildDualityRequestFromContent(
     taggedUserId: string;
     taggedUserName: string;
     taggedUserAction: "pending" | "accepted" | "declined";
+    taggedUsers?: TaggedUserState[];
   }
 ) {
   await buildDualityRequest(contentId, "content", payload);
@@ -201,6 +252,7 @@ export async function buildDualityRequestFromBox(
     taggedUserId: string;
     taggedUserName: string;
     taggedUserAction: "pending" | "accepted" | "declined";
+    taggedUsers?: TaggedUserState[];
   }
 ) {
   await buildDualityRequest(boxId, "box", payload);
@@ -210,14 +262,26 @@ export async function applyTaggedUserDecision(
   id: string,
   duality: DualityRequestDoc,
   actorName: string,
-  decision: "accepted" | "declined"
+  decision: "accepted" | "declined",
+  actorUserId?: string
 ) {
   const at = dayStamp();
   const nowIso = new Date().toISOString();
-  const dualityStatus = decision === "accepted" ? "pending" : "rejected";
+  const targetUserId = actorUserId || duality.taggedUserId;
+  const taggedUsers = normalizeTaggedUsers(duality);
+  const updatedTaggedUsers = taggedUsers.map((user) =>
+    user.userId === targetUserId ? { ...user, action: decision } : user
+  );
+  const targetTaggedUser = updatedTaggedUsers.find((user) => user.userId === targetUserId);
+  if (!targetTaggedUser) return;
+  const dualityStatus = aggregateTaggedUserStatus(updatedTaggedUsers);
+  const firstTaggedUser = updatedTaggedUsers[0] || targetTaggedUser;
 
   await updateDoc("dualityRequests", id, {
-    taggedUserAction: decision,
+    taggedUserId: firstTaggedUser.userId,
+    taggedUserName: firstTaggedUser.name,
+    taggedUserAction: firstTaggedUser.action,
+    taggedUsers: updatedTaggedUsers,
     status: dualityStatus,
     decisionHistory: [
       ...(duality.decisionHistory || []),
@@ -226,7 +290,7 @@ export async function applyTaggedUserDecision(
         by: actorName,
         at,
       },
-      ...(decision === "declined" ? [{ action: "Rejected", by: "System", at }] : []),
+      ...(dualityStatus === "rejected" ? [{ action: "Rejected", by: "System", at }] : []),
     ],
     timeline: [
       ...(duality.timeline || []),
@@ -234,7 +298,8 @@ export async function applyTaggedUserDecision(
         event: decision === "accepted" ? "Tagged user accepted" : "Tagged user declined",
         at,
       },
-      ...(decision === "declined" ? [{ event: "Auto-rejected", at }] : []),
+      ...(dualityStatus === "rejected" ? [{ event: "Auto-rejected", at }] : []),
+      ...(dualityStatus === "pending" ? [{ event: "All tagged users accepted", at }] : []),
     ],
   });
 
@@ -245,18 +310,29 @@ export async function applyTaggedUserDecision(
       id: `${id}-h${((box.history as unknown[])?.length || 0) + 1}-${Date.now()}`,
       requestId: id,
       actionType: "tagged_user_action",
-      actorId: duality.taggedUserId,
+      actorId: targetUserId,
       actorName,
       note: decision === "accepted" ? "Tagged user accepted" : "Tagged user declined",
       createdAt: nowIso,
     };
+    const boxAction =
+      firstTaggedUser.action === "declined"
+        ? "refused"
+        : firstTaggedUser.action;
     await updateDoc("bmidBoxRequests", id, {
-      taggedUserAction: decision === "accepted" ? "accepted" : "refused",
+      taggedUserId: firstTaggedUser.userId,
+      taggedUserAction: boxAction,
+      taggedUsers: updatedTaggedUsers,
       taggedUserActionAt: nowIso,
       taggedUserActionNote: decision === "accepted" ? "Tagged user accepted" : "Tagged user declined",
-      currentStatus: decision === "accepted" ? "pending_admin_review" : "refused",
-      rejectionReason: decision === "declined" ? "Tagged user declined Duality participation" : null,
-      finalizedAt: decision === "declined" ? nowIso : null,
+      currentStatus:
+        dualityStatus === "pending"
+          ? "pending_admin_review"
+          : dualityStatus === "rejected"
+            ? "refused"
+            : "pending_tagged_user",
+      rejectionReason: dualityStatus === "rejected" ? "Tagged user declined Duality participation" : null,
+      finalizedAt: dualityStatus === "rejected" ? nowIso : null,
       history: [...((box.history as unknown[]) || []), historyEntry],
     });
     return;
@@ -265,9 +341,12 @@ export async function applyTaggedUserDecision(
   const content = await getDoc<Record<string, unknown>>("contentRequests", id);
   const existingNotes = (content?.adminNotes as { note: string; by: string; at: string }[] | undefined) || [];
   await updateDoc("contentRequests", id, {
-    taggedUserAction: decision,
-    status: decision === "accepted" ? "pending" : "rejected",
-    rejectionReason: decision === "declined" ? "Tagged user declined" : null,
+    taggedUserId: firstTaggedUser.userId,
+    taggedUserName: firstTaggedUser.name,
+    taggedUserAction: firstTaggedUser.action,
+    taggedUsers: updatedTaggedUsers,
+    status: dualityStatus === "pending" ? "pending" : dualityStatus,
+    rejectionReason: dualityStatus === "rejected" ? "Tagged user declined" : null,
     adminNotes: [
       ...existingNotes,
       {

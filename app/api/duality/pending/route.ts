@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { guard } from "@/lib/server/guard";
 import { db } from "@/lib/server/firebase";
 import { ensureBmidBoxSeeded } from "@/lib/server/bmid-box";
+import { effectiveDualityStatus } from "@/lib/server/bmid";
+import type { DualityRequestDoc } from "@/lib/server/bmid";
 import { error, json } from "@/lib/server/response";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +23,10 @@ export async function GET(req: NextRequest) {
     const snap = await db().collection("dualityRequests").limit(limit * 3).get();
     const items = snap.docs
       .map(toItem)
+      .map((item) => ({
+        ...item,
+        status: effectiveDualityStatus(item as unknown as DualityRequestDoc),
+      }))
       .filter((item) => item.status === "waiting_tagged")
       .sort((a, b) => {
         const aCreated = String(a.createdAt || "");

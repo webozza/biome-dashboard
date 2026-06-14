@@ -32,6 +32,15 @@ function formatDate(value: string | null) {
   });
 }
 
+function taggedSnapshots(request: { taggedSnapshots?: unknown; taggedSnapshot?: unknown }) {
+  if (Array.isArray(request.taggedSnapshots) && request.taggedSnapshots.length > 0) {
+    return request.taggedSnapshots as Array<{ userId?: string | null; name?: string; email?: string | null; bmidNumber?: string | null; verified?: boolean }>;
+  }
+  return request.taggedSnapshot
+    ? [request.taggedSnapshot as { userId?: string | null; name?: string; email?: string | null; bmidNumber?: string | null; verified?: boolean }]
+    : [];
+}
+
 type ActionTone = "primary" | "danger" | "neutral";
 
 type ActionDef = {
@@ -318,18 +327,27 @@ export default function BmidBoxRequestDetailPage() {
               {request.type === "duality" ? (
                 <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">Tagged</p>
-                  <p className="mt-1 text-sm font-bold text-main">{request.taggedSnapshot?.name || "Not tagged"}</p>
-                  <p className="mt-1 text-xs text-muted">{request.taggedSnapshot?.email || "No email"}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-                    <StatusBadge status={request.taggedUserAction || "pending"} size="xs" />
-                    <span
-                      className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400"
-                      title={request.taggedSnapshot?.bmidNumber || "No BMID"}
-                    >
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                      {request.taggedSnapshot?.bmidNumber || "No BMID"}
-                    </span>
-                    {request.taggedUserActionNote ? <span>{request.taggedUserActionNote}</span> : null}
+                  <div className="mt-2 space-y-3">
+                    {taggedSnapshots(request).map((tagged, index) => {
+                      const action = request.taggedUsers?.find((user) => user.userId === tagged.userId)?.action || request.taggedUserAction || "pending";
+                      return (
+                        <div key={tagged.userId || index} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                          <p className="text-sm font-bold text-main">{tagged.name || "Not tagged"}</p>
+                          <p className="mt-1 text-xs text-muted">{tagged.email || "No email"}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+                            <StatusBadge status={action} size="xs" />
+                            <span
+                              className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400"
+                              title={tagged.bmidNumber || "No BMID"}
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                              {tagged.bmidNumber || "No BMID"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {request.taggedUserActionNote ? <p className="text-xs text-muted">{request.taggedUserActionNote}</p> : null}
                   </div>
                 </div>
               ) : null}

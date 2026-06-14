@@ -63,7 +63,8 @@ export function RequestsTab() {
     postId: "",
   });
   const [selectedUserOption, setSelectedUserOption] = useState<UserPickerOption | null>(null);
-  const [taggedUserOption, setTaggedUserOption] = useState<UserPickerOption | null>(null);
+  const [taggedUserOptions, setTaggedUserOptions] = useState<UserPickerOption[]>([]);
+  const [taggedUserDraft, setTaggedUserDraft] = useState<UserPickerOption | null>(null);
   const deferredSearch = useDeferredValue(searchQuery);
 
   useEffect(() => {
@@ -142,7 +143,8 @@ export function RequestsTab() {
       setCreateOpen(false);
       setCreateForm({ postTitle: "", postPreview: "", postImageUrl: "", type: "own", postId: "" });
       setSelectedUserOption(null);
-      setTaggedUserOption(null);
+      setTaggedUserOptions([]);
+      setTaggedUserDraft(null);
       queryClient.invalidateQueries({ queryKey: ["content", "list"] });
     },
   });
@@ -232,12 +234,23 @@ export function RequestsTab() {
       votingStatus: null,
       votingOutcome: null,
     };
-    if (createForm.type === "duality" && taggedUserOption) {
-      payload.taggedUserId = taggedUserOption.id;
-      payload.taggedUserName = taggedUserOption.displayName;
+    if (createForm.type === "duality" && taggedUserOptions.length > 0) {
+      payload.taggedUserIds = taggedUserOptions.map((tagged) => tagged.id);
+      payload.taggedUserName = taggedUserOptions.map((tagged) => tagged.displayName).join(", ");
       payload.taggedUserAction = "pending";
     }
     await createMutation.mutateAsync(payload);
+  }
+
+  function handleTaggedUserSelect(userOption: UserPickerOption) {
+    if (userOption.id === selectedUserOption?.id) {
+      setTaggedUserDraft(null);
+      return;
+    }
+    setTaggedUserOptions((current) =>
+      current.some((tagged) => tagged.id === userOption.id) ? current : [...current, userOption]
+    );
+    setTaggedUserDraft(null);
   }
 
   function handleOwnerSelect(userOption: UserPickerOption) {
@@ -460,7 +473,13 @@ export function RequestsTab() {
                 <button
                   key={t}
                   type="button"
-                  onClick={() => setCreateForm((f) => ({ ...f, type: t }))}
+                  onClick={() => {
+                    setCreateForm((f) => ({ ...f, type: t }));
+                    if (t === "own") {
+                      setTaggedUserOptions([]);
+                      setTaggedUserDraft(null);
+                    }
+                  }}
                   disabled={createMutation.isPending}
                   className={`p-4 rounded-xl border text-left transition-all ${
                     createForm.type === t
@@ -487,7 +506,7 @@ export function RequestsTab() {
                   <p className="text-[10px] text-muted leading-relaxed">
                     {t === "own"
                       ? "User A creates the request and tags themselves. Admin review required."
-                      : "User A creates the request and tags User B. Tagged user action matters."}
+                      : "User A creates the request and tags one or more users. Every tagged user action matters."}
                   </p>
                 </button>
               ))}
@@ -508,13 +527,29 @@ export function RequestsTab() {
 
           {createForm.type === "duality" && (
             <div className="space-y-1.5">
-              <label className="block text-xs text-tertiary">User B (Tagged User) *</label>
+              <label className="block text-xs text-tertiary">Tagged Users *</label>
               <UserPicker
                 token={apiToken!}
-                value={taggedUserOption}
-                onSelect={setTaggedUserOption}
+                value={taggedUserDraft}
+                onSelect={handleTaggedUserSelect}
                 disabled={createMutation.isPending}
               />
+              {taggedUserOptions.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {taggedUserOptions.map((tagged) => (
+                    <button
+                      key={tagged.id}
+                      type="button"
+                      onClick={() =>
+                        setTaggedUserOptions((current) => current.filter((item) => item.id !== tagged.id))
+                      }
+                      className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-main hover:border-red-500/30 hover:text-red-300"
+                    >
+                      {tagged.displayName} x
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -601,9 +636,9 @@ export function RequestsTab() {
             ) : (
               <div className="space-y-1 text-xs text-secondary">
                 <p>1. User A creates a post and transfers to BMID Content</p>
-                <p>2. User A tags User B in the duality request</p>
-                <p>3. User B receives notification to accept/decline</p>
-                <p>4. If User B accepts, request proceeds to admin review</p>
+                <p>2. User A tags one or more users in the duality request</p>
+                <p>3. Tagged users receive notification to accept/decline</p>
+                <p>4. If all tagged users accept, request proceeds to admin review</p>
                 <p>5. Admin approval opens voting for verified users: Accept / Ignore / Refuse</p>
               </div>
             )}
@@ -621,7 +656,8 @@ export function RequestsTab() {
                 setCreateOpen(false);
                 setCreateForm({ postTitle: "", postPreview: "", postImageUrl: "", type: "own", postId: "" });
                 setSelectedUserOption(null);
-                setTaggedUserOption(null);
+                setTaggedUserOptions([]);
+                setTaggedUserDraft(null);
               }}
               disabled={createMutation.isPending}
               className="flex-1 py-2.5 bg-white/5 text-secondary border border-white/10 rounded-xl text-sm hover:bg-white/10 transition-colors disabled:opacity-60"
@@ -635,7 +671,7 @@ export function RequestsTab() {
                 !selectedUserOption ||
                 !createForm.postTitle.trim() ||
                 !createForm.postPreview.trim() ||
-                (createForm.type === "duality" && !taggedUserOption)
+                (createForm.type === "duality" && taggedUserOptions.length === 0)
               }
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white border border-emerald-500/40 rounded-xl text-sm hover:bg-emerald-500 transition-colors disabled:opacity-60"
             >

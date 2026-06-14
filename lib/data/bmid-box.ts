@@ -23,6 +23,12 @@ export interface BmidBoxIdentitySnapshot {
   verified: boolean;
 }
 
+export interface BmidBoxTaggedUserState {
+  userId: string;
+  name: string;
+  action: "pending" | "accepted" | "declined";
+}
+
 export interface BmidBoxHistoryEntry {
   id: string;
   requestId: string;
@@ -103,6 +109,7 @@ export interface BmidBoxRequest {
   taggedUserId: string | null;
   ownerSnapshot: BmidBoxIdentitySnapshot;
   taggedSnapshot: BmidBoxIdentitySnapshot | null;
+  taggedSnapshots?: BmidBoxIdentitySnapshot[];
   type: BmidBoxRequestType;
   sourcePlatform: BmidBoxPlatform;
   sourceUrl: string;
@@ -124,6 +131,7 @@ export interface BmidBoxRequest {
   votingEndAt: string | null;
   finalizedAt: string | null;
   taggedUserAction: TaggedUserAction | null;
+  taggedUsers?: BmidBoxTaggedUserState[];
   taggedUserActionAt: string | null;
   taggedUserActionNote: string | null;
   ownerVerified: boolean;

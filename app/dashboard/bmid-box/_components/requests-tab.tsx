@@ -81,7 +81,8 @@ type DirtyField = "platform" | "sourceUrl" | "title" | "caption" | "description"
 
 type CreateFormState = {
   owner: UserPickerOption | null;
-  tagged: UserPickerOption | null;
+  tagged: UserPickerOption[];
+  taggedDraft: UserPickerOption | null;
   type: BmidBoxRequestType;
   platform: BmidBoxPlatform;
   sourceUrl: string;
@@ -94,7 +95,8 @@ type CreateFormState = {
 
 const emptyForm: CreateFormState = {
   owner: null,
-  tagged: null,
+  tagged: [],
+  taggedDraft: null,
   type: "own",
   platform: "instagram",
   sourceUrl: "",
@@ -175,6 +177,12 @@ function contentTypeLabel(value: string | undefined) {
   if (value === "video") return "Video";
   if (value === "link") return "Link";
   return "Post";
+}
+
+function taggedBoxNames(request: BmidBoxRequest) {
+  if (request.taggedSnapshots?.length) return request.taggedSnapshots.map((tagged) => tagged.name).join(", ");
+  if (request.taggedUsers?.length) return request.taggedUsers.map((tagged) => tagged.name).join(", ");
+  return request.taggedSnapshot?.name || "Same as owner";
 }
 
 export function RequestsTab() {
@@ -322,7 +330,7 @@ export function RequestsTab() {
     setFormError(null);
     if (!form.owner) return setFormError("Select an owner user");
     if (!form.sourceUrl.trim()) return setFormError("Source URL is required");
-    if (form.type === "duality" && !form.tagged) return setFormError("Duality requests need a tagged user");
+    if (form.type === "duality" && form.tagged.length === 0) return setFormError("Duality requests need at least one tagged user");
 
     const payload: Record<string, unknown> = {
       ownerUserId: form.owner.id,
@@ -352,9 +360,9 @@ export function RequestsTab() {
         : null,
     };
 
-    if (form.type === "duality" && form.tagged) {
-      payload.taggedUserId = form.tagged.id;
-      payload.taggedName = form.tagged.displayName;
+    if (form.type === "duality" && form.tagged.length > 0) {
+      payload.taggedUserIds = form.tagged.map((user) => user.id);
+      payload.taggedName = form.tagged.map((user) => user.displayName).join(", ");
     }
 
     createMutation.mutate(payload);
@@ -369,7 +377,7 @@ export function RequestsTab() {
         request.id,
         request.sourceUrl,
         request.ownerSnapshot?.name || "",
-        request.taggedSnapshot?.name || "",
+        taggedBoxNames(request),
         request.previewData.title,
       ]
         .join(" ")
@@ -450,7 +458,7 @@ export function RequestsTab() {
       key: "tagged",
       label: "Tagged",
       render: (request: BmidBoxRequest & { id: string }) => (
-        <span className="font-medium text-main">{request.taggedSnapshot?.name || "Same as owner"}</span>
+        <span className="font-medium text-main">{taggedBoxNames(request)}</span>
       ),
     },
     {
@@ -659,7 +667,7 @@ export function RequestsTab() {
                       <button
                         key={value}
                         type="button"
-                        onClick={() => setForm((current) => ({ ...current, type: value, tagged: value === "own" ? null : current.tagged }))}
+                        onClick={() => setForm((current) => ({ ...current, type: value, tagged: value === "own" ? [] : current.tagged, taggedDraft: null }))}
                         className={`flex-1 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] transition ${
                           form.type === value
                             ? "border-primary/40 bg-primary/10 text-primary"
@@ -707,10 +715,38 @@ export function RequestsTab() {
                   <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-muted">Tagged User (verified)</label>
                   <UserPicker
                     token={apiToken || ""}
-                    value={form.tagged}
-                    onSelect={(user) => setForm((current) => ({ ...current, tagged: user }))}
+                    value={form.taggedDraft}
+                    onSelect={(user) =>
+                      setForm((current) => ({
+                        ...current,
+                        taggedDraft: null,
+                        tagged:
+                          user.id === current.owner?.id || current.tagged.some((item) => item.id === user.id)
+                            ? current.tagged
+                            : [...current.tagged, user],
+                      }))
+                    }
                     verifiedOnly
                   />
+                  {form.tagged.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {form.tagged.map((user) => (
+                        <button
+                          key={user.id}
+                          type="button"
+                          onClick={() =>
+                            setForm((current) => ({
+                              ...current,
+                              tagged: current.tagged.filter((item) => item.id !== user.id),
+                            }))
+                          }
+                          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-main hover:border-red-500/30 hover:text-red-300"
+                        >
+                          {user.displayName} x
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 

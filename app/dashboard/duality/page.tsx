@@ -27,6 +27,7 @@ type DualityDoc = {
   taggedUserId: string;
   taggedUserName: string;
   taggedUserAction: "pending" | "accepted" | "declined";
+  taggedUsers?: { userId: string; name: string; action: "pending" | "accepted" | "declined" }[];
   status: "pending" | "approved" | "rejected" | "waiting_tagged" | "cancelled";
   source: "content" | "box";
   decisionHistory: { action: string; by: string; at: string }[];
@@ -36,6 +37,38 @@ type DualityDoc = {
   reviewedBy?: string | null;
   adminNote?: string | null;
 };
+
+function taggedSummary(item: DualityDoc) {
+  return item.taggedUsers?.length
+    ? item.taggedUsers.map((user) => user.name).join(", ")
+    : item.taggedUserName;
+}
+
+function normalizedTaggedUsers(item: DualityDoc) {
+  if (item.taggedUsers?.length) {
+    return item.taggedUsers.map((tagged) => ({
+      ...tagged,
+      action: tagged.action || "pending",
+    }));
+  }
+  return [
+    {
+      userId: item.taggedUserId,
+      name: item.taggedUserName,
+      action: item.taggedUserAction || "pending",
+    },
+  ];
+}
+
+function taggedActionCounts(item: DualityDoc) {
+  const taggedUsers = normalizedTaggedUsers(item);
+  return {
+    total: taggedUsers.length,
+    accepted: taggedUsers.filter((tagged) => tagged.action === "accepted").length,
+    declined: taggedUsers.filter((tagged) => tagged.action === "declined").length,
+    awaiting: taggedUsers.filter((tagged) => tagged.action === "pending").length,
+  };
+}
 
 type ListResponse = { items: DualityDoc[]; nextCursor: string | null };
 
@@ -62,6 +95,11 @@ export default function DualityPage() {
   const [pageCursors, setPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
+  const [taggedListId, setTaggedListId] = useState<string | null>(null);
+  const [taggedActionPending, setTaggedActionPending] = useState<{
+    userId: string;
+    decision: "accepted" | "declined";
+  } | null>(null);
   const deferredSearch = useDeferredValue(searchQuery);
 
   const statusFilter = activeFilters.status && activeFilters.status !== "all" ? activeFilters.status : undefined;
@@ -92,6 +130,7 @@ export default function DualityPage() {
       (r) =>
         r.ownerName?.toLowerCase().includes(q) ||
         r.taggedUserName?.toLowerCase().includes(q) ||
+        r.taggedUsers?.some((user) => user.name.toLowerCase().includes(q)) ||
         r.id.toLowerCase().includes(q)
     );
   }, [deferredSearch, listQuery.data?.items]);
@@ -99,6 +138,10 @@ export default function DualityPage() {
   const selected = useMemo(
     () => visibleRows.find((r) => r.id === selectedId) || listQuery.data?.items.find((r) => r.id === selectedId) || null,
     [visibleRows, selectedId, listQuery.data?.items]
+  );
+  const taggedListRequest = useMemo(
+    () => listQuery.data?.items.find((item) => item.id === taggedListId) || null,
+    [listQuery.data?.items, taggedListId]
   );
 
   const patchMutation = useMutation({
@@ -151,6 +194,25 @@ export default function DualityPage() {
   });
 
   const isMutating = patchMutation.isPending || deleteMutation.isPending;
+
+  async function handleTaggedUserAction(
+    id: string,
+    targetTaggedUserId: string,
+    decision: "accepted" | "declined"
+  ) {
+    setTaggedActionPending({ userId: targetTaggedUserId, decision });
+    try {
+      await patchMutation.mutateAsync({
+        id,
+        patch: {
+          taggedUserAction: decision,
+          targetTaggedUserId,
+        },
+      });
+    } finally {
+      setTaggedActionPending(null);
+    }
+  }
 
   function handlePageChange(nextPage: number) {
     if (nextPage < 1 || nextPage === currentPage) return;
@@ -210,15 +272,56 @@ export default function DualityPage() {
     {
       key: "taggedUserName",
       label: "Joint User",
-      render: (r: DualityDoc) => (
-        <div>
-          <p className="font-bold text-main">{r.taggedUserName}</p>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <span className="text-[10px] text-muted font-bold uppercase tracking-tight">Status:</span>
-            <StatusBadge status={r.taggedUserAction} size="xs" />
+      render: (r: DualityDoc) => {
+        const taggedUsers = normalizedTaggedUsers(r);
+        const counts = taggedActionCounts(r);
+        const visibleTaggedUsers = taggedUsers.slice(0, 3);
+        const hiddenCount = Math.max(0, taggedUsers.length - visibleTaggedUsers.length);
+        return (
+          <div className="min-w-[280px] space-y-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[10px] font-bold uppercase text-muted">{counts.total} tagged</span>
+              <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-600">
+                {counts.accepted} accepted
+              </span>
+              <span className="rounded-md border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-red-500">
+                {counts.declined} declined
+              </span>
+              <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-600">
+                {counts.awaiting} awaiting
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {visibleTaggedUsers.map((tagged) => (
+                <span key={tagged.userId} className="inline-flex items-center gap-1.5 text-[10px] font-medium text-main">
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      tagged.action === "accepted"
+                        ? "bg-emerald-500"
+                        : tagged.action === "declined"
+                          ? "bg-red-500"
+                          : "bg-amber-500"
+                    }`}
+                  />
+                  {tagged.name}
+                </span>
+              ))}
+              {hiddenCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setTaggedListId(r.id);
+                  }}
+                  className="rounded-md border border-primary/20 bg-primary/5 px-2 py-0.5 text-[9px] font-bold uppercase text-primary hover:bg-primary/10"
+                >
+                  +{hiddenCount} more
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: "source",
@@ -228,11 +331,6 @@ export default function DualityPage() {
           {r.source}
         </span>
       ),
-    },
-    {
-      key: "status",
-      label: "State",
-      render: (r: DualityDoc) => <StatusBadge status={r.status} />,
     },
     {
       key: "createdAt",
@@ -374,18 +472,65 @@ export default function DualityPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-y-5 gap-x-4">
+            <div className="grid grid-cols-1 gap-y-5 gap-x-4 sm:grid-cols-2">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Primary Owner</p>
                 <p className="font-bold text-main">{selected.ownerName}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Associated Peer</p>
-                <p className="font-bold text-main">{selected.taggedUserName}</p>
+                <p className="break-words font-bold text-main">{taggedSummary(selected)}</p>
               </div>
-              <div>
+              <div className="sm:col-span-2">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Peer Engagement</p>
-                <StatusBadge status={selected.taggedUserAction} />
+                <div className="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
+                  {(selected.taggedUsers?.length ? selected.taggedUsers : [{ userId: selected.taggedUserId, name: selected.taggedUserName, action: selected.taggedUserAction }]).map((tagged) => (
+                    <div key={tagged.userId} className="flex flex-col gap-2 bg-white/[0.02] px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center justify-between gap-3 sm:flex-1">
+                        <span className="break-words text-xs font-bold text-main">{tagged.name}</span>
+                        {tagged.action === "accepted" || tagged.action === "declined" ? (
+                          <StatusBadge status={tagged.action} size="xs" />
+                        ) : (
+                          <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-amber-500">
+                            Awaiting response
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+                        {selected.status === "waiting_tagged" && tagged.action !== "accepted" && tagged.action !== "declined" ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => void handleTaggedUserAction(selected.id, tagged.userId, "accepted")}
+                              disabled={isMutating}
+                              className="inline-flex items-center justify-center gap-1 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-bold uppercase text-emerald-600 hover:bg-emerald-500/20 disabled:opacity-60"
+                            >
+                              {taggedActionPending?.userId === tagged.userId && taggedActionPending.decision === "accepted" ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <CheckCircle className="h-3.5 w-3.5" />
+                              )}
+                              Accept
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleTaggedUserAction(selected.id, tagged.userId, "declined")}
+                              disabled={isMutating}
+                              className="inline-flex items-center justify-center gap-1 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-[10px] font-bold uppercase text-red-500 hover:bg-red-500/20 disabled:opacity-60"
+                            >
+                              {taggedActionPending?.userId === tagged.userId && taggedActionPending.decision === "declined" ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <XCircle className="h-3.5 w-3.5" />
+                              )}
+                              Decline
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Asset Source</p>
@@ -464,7 +609,7 @@ export default function DualityPage() {
             )}
 
             {/* Action buttons */}
-            {(selected.status === "pending" || selected.status === "waiting_tagged") && (
+            {selected.status === "pending" && (
               <div className="flex gap-2">
                 <button
                   onClick={() => void handleStatusUpdate(selected.id, "approved")}
@@ -507,6 +652,65 @@ export default function DualityPage() {
             </button>
           </div>
         )}
+      </DetailDrawer>
+
+      <DetailDrawer
+        open={Boolean(taggedListRequest)}
+        onClose={() => setTaggedListId(null)}
+        title={`Tagged Users: ${taggedListRequest?.ownerName || ""}`}
+        variant="modal"
+        panelClassName="max-w-3xl"
+        bodyClassName="p-4 md:p-6"
+      >
+        {taggedListRequest ? (
+          <div className="space-y-5">
+            {(() => {
+              const taggedUsers = normalizedTaggedUsers(taggedListRequest);
+              const counts = taggedActionCounts(taggedListRequest);
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div className="rounded-lg border border-border bg-background/60 p-3">
+                      <p className="text-[9px] font-bold uppercase text-muted">Total</p>
+                      <p className="mt-1 text-lg font-black text-main">{counts.total}</p>
+                    </div>
+                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                      <p className="text-[9px] font-bold uppercase text-emerald-600">Accepted</p>
+                      <p className="mt-1 text-lg font-black text-emerald-600">{counts.accepted}</p>
+                    </div>
+                    <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                      <p className="text-[9px] font-bold uppercase text-red-500">Declined</p>
+                      <p className="mt-1 text-lg font-black text-red-500">{counts.declined}</p>
+                    </div>
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                      <p className="text-[9px] font-bold uppercase text-amber-600">Awaiting</p>
+                      <p className="mt-1 text-lg font-black text-amber-600">{counts.awaiting}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {taggedUsers.map((tagged, index) => (
+                      <div
+                        key={tagged.userId}
+                        className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-background/50 px-3 py-3"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-surface-hover text-[10px] font-bold text-muted">
+                            {index + 1}
+                          </span>
+                          <p className="truncate text-sm font-bold text-main" title={tagged.name}>
+                            {tagged.name}
+                          </p>
+                        </div>
+                        <StatusBadge status={tagged.action} size="xs" />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        ) : null}
       </DetailDrawer>
 
       <ConfirmModal

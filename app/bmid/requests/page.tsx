@@ -12,6 +12,17 @@ async function authedFetch<T>(input: string): Promise<T> {
   return data;
 }
 
+function taggedNames(item: Record<string, unknown>) {
+  const taggedUsers = Array.isArray(item.taggedUsers) ? item.taggedUsers : [];
+  if (taggedUsers.length > 0) {
+    return taggedUsers
+      .map((tagged) => (tagged as { name?: unknown }).name)
+      .filter((name): name is string => typeof name === "string" && Boolean(name))
+      .join(", ");
+  }
+  return String(item.taggedUserName || "—");
+}
+
 export default function BmidRequestsPage() {
   const listQuery = useQuery({
     queryKey: ["bmid", "requests"],
@@ -36,7 +47,7 @@ export default function BmidRequestsPage() {
                   <div>
                     <p className="text-sm font-bold text-main">{String(item.postTitle || "Untitled request")}</p>
                     <p className="mt-1 text-xs text-muted font-mono">{String(item.id)}</p>
-                    <p className="mt-2 text-xs text-muted">{String(item.type || "")} • Tagged: {String(item.taggedUserName || "—")}</p>
+                    <p className="mt-2 text-xs text-muted">{String(item.type || "")} • Tagged: {taggedNames(item)}</p>
                   </div>
                   <div className="flex gap-2">
                     <StatusBadge status={String(item.status || "pending")} size="xs" />

@@ -3,6 +3,8 @@ import { buildCreate } from "@/lib/server/resource";
 import { guard } from "@/lib/server/guard";
 import { db } from "@/lib/server/firebase";
 import { ensureBmidBoxSeeded } from "@/lib/server/bmid-box";
+import { effectiveDualityStatus } from "@/lib/server/bmid";
+import type { DualityRequestDoc } from "@/lib/server/bmid";
 import { error, json, parsePagination } from "@/lib/server/response";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +32,13 @@ export async function GET(req: NextRequest) {
       ({ id: doc.id, ...(doc.data() as Record<string, unknown>) });
     const all: Item[] = snap.docs
       .map(toItem)
+      .map((item) => {
+        if (!Array.isArray(item.taggedUsers) || !["waiting_tagged", "pending", "rejected"].includes(String(item.status))) {
+          return item;
+        }
+        const status = effectiveDualityStatus(item as unknown as DualityRequestDoc);
+        return { ...item, status };
+      })
       .filter((item) => {
         for (const [field, value] of Object.entries(filters)) {
           if (String(item[field] ?? "") !== value) return false;

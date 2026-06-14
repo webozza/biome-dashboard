@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { CheckCircle, GitBranch, Loader2, XCircle } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserPicker, type UserPickerOption } from "@/components/ui/user-picker";
@@ -15,10 +15,29 @@ type DualityDoc = {
   taggedUserId: string;
   taggedUserName: string;
   taggedUserAction: "pending" | "accepted" | "declined";
+  taggedUsers?: { userId: string; name: string; action: "pending" | "accepted" | "declined" }[];
   status: "pending" | "approved" | "rejected" | "waiting_tagged" | "cancelled";
   source: "content" | "box";
   createdAt: string;
 };
+
+function taggedSummary(item: DualityDoc) {
+  return item.taggedUsers?.length
+    ? item.taggedUsers.map((user) => `${user.name} (${user.action})`).join(", ")
+    : item.taggedUserName;
+}
+
+function pendingResponder(item: DualityDoc): UserPickerOption | null {
+  const pendingTagged = item.taggedUsers?.find(
+    (user) => !user.action || user.action === "pending"
+  );
+  if (item.taggedUsers?.length && !pendingTagged) return null;
+  return {
+    id: pendingTagged?.userId || item.taggedUserId,
+    displayName: pendingTagged?.name || item.taggedUserName,
+    email: "",
+  };
+}
 
 export default function BmidRespondPage() {
   const queryClient = useQueryClient();
@@ -42,15 +61,6 @@ export default function BmidRespondPage() {
     [listQuery.data?.items, selectedId]
   );
 
-  useEffect(() => {
-    if (!selected) return;
-    setActingUser({
-      id: selected.taggedUserId,
-      displayName: selected.taggedUserName,
-      email: "",
-    });
-  }, [selected]);
-
   const respondMutation = useMutation({
     mutationFn: async (decision: "accepted" | "declined") => {
       if (!selected || !actingUser) throw new Error("missing_selection");
@@ -68,12 +78,29 @@ export default function BmidRespondPage() {
       });
       return readJson<DualityDoc>(resp);
     },
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      const nextResponder = pendingResponder(updated);
+      queryClient.setQueryData<{ items: DualityDoc[] }>(
+        ["bmid-respond", "waiting"],
+        (current) => ({
+          items: nextResponder
+            ? (current?.items || []).map((item) => (item.id === updated.id ? updated : item))
+            : (current?.items || []).filter((item) => item.id !== updated.id),
+        })
+      );
+
+      if (nextResponder) {
+        setSelectedId(updated.id);
+        setActingUser(nextResponder);
+      } else {
+        setSelectedId(null);
+        setActingUser(null);
+      }
+
       queryClient.invalidateQueries({ queryKey: ["bmid-respond", "waiting"] });
       queryClient.invalidateQueries({ queryKey: ["content"] });
       queryClient.invalidateQueries({ queryKey: ["bmid-box"] });
       queryClient.invalidateQueries({ queryKey: ["duality"] });
-      setSelectedId(null);
     },
   });
 
@@ -106,14 +133,17 @@ export default function BmidRespondPage() {
               {listQuery.data.items.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => setSelectedId(item.id)}
+                  onClick={() => {
+                    setSelectedId(item.id);
+                    setActingUser(pendingResponder(item));
+                  }}
                   className={`w-full rounded-xl border p-4 text-left transition-all ${
                     selectedId === item.id ? "border-primary/30 bg-primary/5" : "border-white/10 bg-white/[0.02] hover:border-white/20"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-bold text-main">{item.ownerName} tagged {item.taggedUserName}</p>
+                      <p className="text-sm font-bold text-main">{item.ownerName} tagged {taggedSummary(item)}</p>
                       <p className="mt-1 text-xs text-muted font-mono">{item.id}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
@@ -140,7 +170,7 @@ export default function BmidRespondPage() {
           ) : (
             <>
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
-                <p className="text-sm font-bold text-main">{selected.ownerName} {"->"} {selected.taggedUserName}</p>
+                <p className="text-sm font-bold text-main">{selected.ownerName} {"->"} {taggedSummary(selected)}</p>
                 <p className="text-xs text-muted font-mono">{selected.id}</p>
                 <div className="flex gap-2">
                   <StatusBadge status={selected.status} size="xs" />

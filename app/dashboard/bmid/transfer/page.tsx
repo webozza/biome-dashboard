@@ -22,7 +22,8 @@ export default function BmidTransferPage() {
   const apiToken = useAuthStore((s) => s.apiToken);
   const [requestType, setRequestType] = useState<"own" | "duality">("own");
   const [ownerUser, setOwnerUser] = useState<UserPickerOption | null>(null);
-  const [taggedUser, setTaggedUser] = useState<UserPickerOption | null>(null);
+  const [taggedUsers, setTaggedUsers] = useState<UserPickerOption[]>([]);
+  const [taggedUserDraft, setTaggedUserDraft] = useState<UserPickerOption | null>(null);
   const [postId, setPostId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -62,8 +63,8 @@ export default function BmidTransferPage() {
           postPreview: description.trim(),
           postImageUrl: imageUrl.trim() || null,
           type: requestType,
-          taggedUserId: requestType === "duality" ? taggedUser?.id || null : null,
-          taggedUserName: requestType === "duality" ? taggedUser?.displayName || null : null,
+          taggedUserIds: requestType === "duality" ? taggedUsers.map((user) => user.id) : null,
+          taggedUserName: requestType === "duality" ? taggedUsers.map((user) => user.displayName).join(", ") : null,
         }),
       });
       return readJson<{ id: string }>(resp);
@@ -81,8 +82,14 @@ export default function BmidTransferPage() {
     setImageUrl("");
     setCreatedRequestId(null);
     if (requestType === "own") {
-      setTaggedUser(user);
+      setTaggedUsers([user]);
     }
+  }
+
+  function addTaggedUser(user: UserPickerOption) {
+    if (user.id === ownerUser?.id) return;
+    setTaggedUsers((current) => (current.some((item) => item.id === user.id) ? current : [...current, user]));
+    setTaggedUserDraft(null);
   }
 
   function handlePostChange(nextPostId: string) {
@@ -114,8 +121,9 @@ export default function BmidTransferPage() {
               onClick={() => {
                 setRequestType(type);
                 setCreatedRequestId(null);
-                if (type === "own" && ownerUser) setTaggedUser(ownerUser);
-                if (type === "duality") setTaggedUser(null);
+                if (type === "own" && ownerUser) setTaggedUsers([ownerUser]);
+                if (type === "duality") setTaggedUsers([]);
+                setTaggedUserDraft(null);
               }}
               className={`rounded-xl border p-4 text-left transition-all ${
                 requestType === type
@@ -146,7 +154,21 @@ export default function BmidTransferPage() {
         {requestType === "duality" ? (
           <div className="space-y-1.5">
             <label className="block text-xs text-tertiary">Tagged User *</label>
-            <UserPicker token={apiToken!} value={taggedUser} onSelect={setTaggedUser} disabled={!apiToken || createMutation.isPending} />
+            <UserPicker token={apiToken!} value={taggedUserDraft} onSelect={addTaggedUser} disabled={!apiToken || createMutation.isPending} />
+            {taggedUsers.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {taggedUsers.map((user) => (
+                  <button
+                    key={user.id}
+                    type="button"
+                    onClick={() => setTaggedUsers((current) => current.filter((item) => item.id !== user.id))}
+                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-main hover:border-red-500/30 hover:text-red-300"
+                  >
+                    {user.displayName} x
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -225,7 +247,7 @@ export default function BmidTransferPage() {
               !postId ||
               !title.trim() ||
               !description.trim() ||
-              (requestType === "duality" && !taggedUser)
+              (requestType === "duality" && taggedUsers.length === 0)
             }
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-60"
           >

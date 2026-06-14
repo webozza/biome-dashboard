@@ -39,7 +39,7 @@ const FIELD_CLASS = "w-full rounded-xl border border-white/10 bg-white/[0.03] px
 
 export default function UserTransferPage() {
   const [type, setType] = useState<"own" | "duality">("own");
-  const [taggedUserId, setTaggedUserId] = useState("");
+  const [taggedUserIds, setTaggedUserIds] = useState<string[]>([]);
   const [postId, setPostId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -77,7 +77,7 @@ export default function UserTransferPage() {
           postTitle: title,
           postPreview: description,
           postImageUrl: imageUrl,
-          taggedUserId: type === "duality" ? taggedUserId : undefined,
+          taggedUserIds: type === "duality" ? taggedUserIds : undefined,
         }),
       }),
     onSuccess: (data) => setCreatedId(data.id),
@@ -136,12 +136,20 @@ export default function UserTransferPage() {
         {type === "duality" ? (
           <div className="space-y-1.5">
             <label className="block text-xs text-tertiary">Tagged User</label>
-            <select value={taggedUserId} onChange={(e) => setTaggedUserId(e.target.value)} className={FIELD_CLASS}>
-              <option value="">{usersQuery.isLoading ? "Loading users..." : "Select tagged user"}</option>
+            <select
+              multiple
+              value={taggedUserIds}
+              onChange={(e) =>
+                setTaggedUserIds(Array.from(e.target.selectedOptions, (option) => option.value))
+              }
+              className={`${FIELD_CLASS} min-h-32`}
+            >
+              {usersQuery.isLoading ? <option value="">Loading users...</option> : null}
               {(usersQuery.data?.items || []).map((user) => (
                 <option key={user.id} value={user.id}>{user.displayName} {user.email ? `(${user.email})` : ""}</option>
               ))}
             </select>
+            <p className="text-xs text-muted">Hold Cmd/Ctrl to select multiple tagged users.</p>
           </div>
         ) : null}
 
@@ -164,7 +172,7 @@ export default function UserTransferPage() {
 
         <button
           onClick={() => void transferMutation.mutate()}
-          disabled={!meQuery.data?.verified || transferMutation.isPending || !postId || !title.trim() || !description.trim() || (type === "duality" && !taggedUserId)}
+          disabled={!meQuery.data?.verified || transferMutation.isPending || !postId || !title.trim() || !description.trim() || (type === "duality" && taggedUserIds.length === 0)}
           className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-60"
         >
           {transferMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}

@@ -22,7 +22,13 @@ type PendingDuality = {
   taggedUserName: string;
   status: string;
   taggedUserAction: string;
+  taggedUsers?: { userId: string; name: string; action: string }[];
 };
+
+function pendingTaggedName(item: PendingDuality) {
+  const pending = item.taggedUsers?.find((user) => user.action === "pending");
+  return pending?.name || item.taggedUserName;
+}
 
 export default function BmidRespondPage() {
   const queryClient = useQueryClient();
@@ -60,6 +66,7 @@ export default function BmidRespondPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-bold">{item.ownerName} tagged you in a BMID request</p>
+                    <p className="mt-1 text-xs text-muted">Responding as: {pendingTaggedName(item)}</p>
                     <p className="mt-1 text-xs text-muted font-mono">{item.id}</p>
                   </div>
                   <div className="flex gap-2">

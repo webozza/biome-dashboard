@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { guard } from "@/lib/server/guard";
 import { createDoc, getDoc, listDocIds } from "@/lib/server/firestore";
 import { buildDualityRequestFromBox } from "@/lib/server/bmid";
+import type { TaggedUserState } from "@/lib/server/bmid";
 import { error, json } from "@/lib/server/response";
 import {
   ensureBmidBoxSeeded,
@@ -23,6 +24,27 @@ type UserDoc = {
 
 function userName(user: UserDoc, fallback = "Unknown user") {
   return user.name || user.displayName || user.email || fallback;
+}
+
+function parseTaggedUserIds(body: Record<string, unknown>) {
+  const raw =
+    Array.isArray(body.taggedUserIds)
+      ? body.taggedUserIds
+      : Array.isArray(body.taggedUsers)
+        ? body.taggedUsers.map((tagged) =>
+            typeof tagged === "string"
+              ? tagged
+              : tagged && typeof tagged === "object" && "id" in tagged
+                ? (tagged as { id?: unknown }).id
+                : tagged && typeof tagged === "object" && "userId" in tagged
+                  ? (tagged as { userId?: unknown }).userId
+                  : null
+          )
+        : typeof body.taggedUserId === "string"
+          ? [body.taggedUserId]
+          : [];
+
+  return [...new Set(raw.filter((id): id is string => typeof id === "string" && Boolean(id.trim())).map((id) => id.trim()))];
 }
 
 function clean(value: unknown) {
@@ -125,40 +147,51 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const taggedUserId =
-    type === "own"
-      ? ownerUserId
-      : typeof body.taggedUserId === "string"
-        ? body.taggedUserId
-        : null;
+  const requestedTaggedUserIds = type === "own" ? [ownerUserId] : parseTaggedUserIds(body);
+  const taggedUserIds = requestedTaggedUserIds.filter((id) => id !== ownerUserId);
 
-  if (type === "duality" && !taggedUserId) {
+  if (type === "duality" && taggedUserIds.length === 0) {
     return error("missing_tagged_user", 400);
   }
+  if (type === "duality" && taggedUserIds.length !== requestedTaggedUserIds.length) {
+    return error("tagged_user_same_as_owner", 400);
+  }
 
-  const tagged = taggedUserId ? await getDoc<UserDoc>("users", taggedUserId) : null;
-  if (type === "duality") {
-    if (!tagged) return error("tagged_user_not_found", 404);
-    if (!tagged.verified || !tagged.bmidNumber) {
+  const taggedUsers: TaggedUserState[] = [];
+  const taggedSnapshots = [];
+  const taggedSourceIds = type === "own" ? [ownerUserId] : taggedUserIds;
+  for (const taggedUserId of taggedSourceIds) {
+    const tagged = type === "own" ? owner : await getDoc<UserDoc>("users", taggedUserId);
+    if (!tagged) return error("tagged_user_not_found", 404, { taggedUserId });
+    if (type === "duality" && (!tagged.verified || !tagged.bmidNumber)) {
       return error("tagged_user_not_verified", 403, {
         detail: "Tagged user must be a verified user with a BMID number",
       });
     }
-    if (tagged.id === owner.id) {
-      return error("tagged_user_same_as_owner", 400);
-    }
+    taggedUsers.push({
+      userId: taggedUserId,
+      name: userName(tagged),
+      action: type === "own" ? "accepted" : "pending",
+    });
+    taggedSnapshots.push({
+      userId: taggedUserId,
+      name: userName(tagged),
+      email: tagged.email,
+      bmidNumber: tagged.bmidNumber ?? null,
+      verified: Boolean(tagged.verified),
+    });
   }
 
   const id = await nextBoxRequestId();
   const now = new Date().toISOString();
 
-  const taggedIdentity = type === "own" ? owner : tagged!;
+  const primaryTagged = taggedUsers[0];
 
   await createDoc(
     "bmidBoxRequests",
     {
       ownerUserId,
-      taggedUserId,
+      taggedUserId: primaryTagged.userId,
       ownerSnapshot: {
         userId: ownerUserId,
         name: userName(owner),
@@ -166,13 +199,8 @@ export async function POST(req: NextRequest) {
         bmidNumber: owner.bmidNumber,
         verified: Boolean(owner.verified),
       },
-      taggedSnapshot: {
-        userId: taggedIdentity.id,
-        name: userName(taggedIdentity),
-        email: taggedIdentity.email,
-        bmidNumber: taggedIdentity.bmidNumber ?? null,
-        verified: Boolean(taggedIdentity.verified),
-      },
+      taggedSnapshot: taggedSnapshots[0] ?? null,
+      taggedSnapshots,
       type,
       sourcePlatform,
       sourceUrl,
@@ -192,10 +220,11 @@ export async function POST(req: NextRequest) {
       votingEndAt: null,
       finalizedAt: null,
       taggedUserAction: type === "own" ? "accepted" : "pending",
+      taggedUsers,
       taggedUserActionAt: type === "own" ? now : null,
       taggedUserActionNote: type === "own" ? "Own request auto-confirmed" : null,
       ownerVerified: Boolean(owner.verified),
-      taggedUserVerified: Boolean(taggedIdentity.verified),
+      taggedUserVerified: Boolean(taggedSnapshots[0]?.verified),
       verificationChecks: {
         ownerVerified: Boolean(owner.verified),
         platformAllowed: true,
@@ -219,13 +248,14 @@ export async function POST(req: NextRequest) {
     id
   );
 
-  if (type === "duality" && tagged) {
+  if (type === "duality") {
     await buildDualityRequestFromBox(id, {
       ownerId: ownerUserId,
       ownerName: userName(owner),
-      taggedUserId: tagged.id,
-      taggedUserName: userName(tagged),
+      taggedUserId: primaryTagged.userId,
+      taggedUserName: primaryTagged.name,
       taggedUserAction: "pending",
+      taggedUsers,
     });
   }
 

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { buildDelete, buildGetOne } from "@/lib/server/resource";
 import { requireAdmin, requireFirebaseUser } from "@/lib/server/auth";
-import { applyTaggedUserDecision, ensureVotingSession } from "@/lib/server/bmid";
+import { applyTaggedUserDecision, ensureVotingSession, normalizeTaggedUsers, userCanRespondToDuality } from "@/lib/server/bmid";
 import type { ContentRequestDoc, DualityRequestDoc } from "@/lib/server/bmid";
 import { getDoc, updateDoc } from "@/lib/server/firestore";
 import { error, json } from "@/lib/server/response";
@@ -31,20 +31,41 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const duality = await getDoc<DualityRequestDoc>("dualityRequests", id);
   if (!duality) return error("not_found", 404);
 
-  const firebaseUser = await requireFirebaseUser(req);
   const taggedDecision =
     body.taggedUserAction === "accepted" || body.taggedUserAction === "declined"
       ? body.taggedUserAction
       : null;
 
   if (taggedDecision) {
-    if (!firebaseUser.ok) return error("unauthorized", 401, { reason: firebaseUser.reason });
-    if (firebaseUser.uid !== duality.taggedUserId && !firebaseUser.isAdmin) {
+    const admin = requireAdmin(req);
+    const firebaseUser = admin.ok ? null : await requireFirebaseUser(req);
+    if (!admin.ok && !firebaseUser?.ok) {
+      return error("unauthorized", 401, { reason: firebaseUser?.reason || admin.reason });
+    }
+
+    const requestedTarget =
+      typeof body.targetTaggedUserId === "string" && body.targetTaggedUserId
+        ? body.targetTaggedUserId
+        : "";
+    const canTargetAnyTaggedUser = admin.ok || Boolean(firebaseUser?.ok && firebaseUser.isAdmin);
+    const targetTaggedUserId = canTargetAnyTaggedUser
+      ? requestedTarget || (firebaseUser?.ok ? firebaseUser.uid : "")
+      : firebaseUser?.ok
+        ? firebaseUser.uid
+        : "";
+
+    if (!targetTaggedUserId || !userCanRespondToDuality(duality, targetTaggedUserId)) {
       return error("forbidden", 403);
     }
 
     try {
-      await applyTaggedUserDecision(id, duality, firebaseUser.email || "Tagged User", taggedDecision);
+      await applyTaggedUserDecision(
+        id,
+        duality,
+        admin.ok ? "Admin" : firebaseUser?.ok ? firebaseUser.email || "Tagged User" : "Tagged User",
+        taggedDecision,
+        targetTaggedUserId
+      );
       const fresh = await getDoc("dualityRequests", id);
       return json(fresh);
     } catch (e) {
@@ -58,7 +79,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const requestedStatus = typeof body.status === "string" ? body.status : null;
 
   if (requestedStatus === "approved") {
-    if (duality.taggedUserAction !== "accepted") {
+    if (!normalizeTaggedUsers(duality).every((user) => user.action === "accepted")) {
       return error("tagged_user_pending", 400);
     }
     try {

@@ -1,12 +1,34 @@
 import { NextRequest } from "next/server";
 import { requireFirebaseUser } from "@/lib/server/auth";
 import { buildDualityRequestFromContent } from "@/lib/server/bmid";
+import type { TaggedUserState } from "@/lib/server/bmid";
 import { createDoc } from "@/lib/server/firestore";
 import { db } from "@/lib/server/firebase";
 import { error, json } from "@/lib/server/response";
 import { notifyAdminRequestCreated } from "@/lib/server/admin-request-email";
 
 export const dynamic = "force-dynamic";
+
+function parseTaggedUserIds(body: Record<string, unknown>) {
+  const raw =
+    Array.isArray(body.taggedUserIds)
+      ? body.taggedUserIds
+      : Array.isArray(body.taggedUsers)
+        ? body.taggedUsers.map((tagged) =>
+            typeof tagged === "string"
+              ? tagged
+              : tagged && typeof tagged === "object" && "id" in tagged
+                ? (tagged as { id?: unknown }).id
+                : tagged && typeof tagged === "object" && "userId" in tagged
+                  ? (tagged as { userId?: unknown }).userId
+                  : null
+          )
+        : typeof body.taggedUserId === "string"
+          ? [body.taggedUserId]
+          : [];
+
+  return [...new Set(raw.filter((id): id is string => typeof id === "string" && Boolean(id.trim())).map((id) => id.trim()))];
+}
 
 export async function POST(req: NextRequest) {
   const user = await requireFirebaseUser(req);
@@ -36,15 +58,27 @@ export async function POST(req: NextRequest) {
   if (!postSnap.exists) return error("post_not_found", 404);
 
   const userName = String(profile.name || profile.displayName || user.email || "User");
-  const taggedUserId = type === "duality" && typeof body.taggedUserId === "string" ? body.taggedUserId : user.uid;
-  let taggedUserName = userName;
+  const taggedUserIds = type === "duality" ? parseTaggedUserIds(body) : [user.uid];
+  if (type === "duality" && taggedUserIds.length === 0) return error("missing_tagged_user", 400);
+  if (type === "duality" && taggedUserIds.includes(user.uid)) return error("invalid_tagged_user", 400);
+
+  const taggedUsers: TaggedUserState[] = [];
   if (type === "duality") {
-    if (!taggedUserId || taggedUserId === user.uid) return error("invalid_tagged_user", 400);
-    const taggedSnap = await db().collection("users").doc(taggedUserId).get();
-    if (!taggedSnap.exists) return error("tagged_user_not_found", 404);
-    const tagged = taggedSnap.data() as Record<string, unknown>;
-    taggedUserName = String(tagged.name || tagged.displayName || tagged.email || "Tagged User");
+    for (const taggedUserId of taggedUserIds) {
+      const taggedSnap = await db().collection("users").doc(taggedUserId).get();
+      if (!taggedSnap.exists) return error("tagged_user_not_found", 404, { taggedUserId });
+      const tagged = taggedSnap.data() as Record<string, unknown>;
+      taggedUsers.push({
+        userId: taggedUserId,
+        name: String(tagged.name || tagged.displayName || tagged.email || "Tagged User"),
+        action: "pending",
+      });
+    }
+  } else {
+    taggedUsers.push({ userId: user.uid, name: userName, action: "accepted" });
   }
+  const primaryTagged = taggedUsers[0];
+  const taggedUserName = taggedUsers.map((tagged) => tagged.name).join(", ");
 
   const payload = {
     userId: user.uid,
@@ -55,9 +89,10 @@ export async function POST(req: NextRequest) {
     postPreview,
     postImageUrl: postImageUrl || null,
     type,
-    taggedUserId,
+    taggedUserId: primaryTagged.userId,
     taggedUserName,
     taggedUserAction: type === "own" ? "accepted" : "pending",
+    taggedUsers,
     status: type === "own" ? "pending" : "waiting_tagged",
     adminNotes: [],
     reviewedBy: null,
@@ -75,9 +110,10 @@ export async function POST(req: NextRequest) {
       await buildDualityRequestFromContent(id, {
         ownerId: user.uid,
         ownerName: userName,
-        taggedUserId,
-        taggedUserName,
+        taggedUserId: primaryTagged.userId,
+        taggedUserName: primaryTagged.name,
         taggedUserAction: "pending",
+        taggedUsers,
       });
     }
     await notifyAdminRequestCreated({

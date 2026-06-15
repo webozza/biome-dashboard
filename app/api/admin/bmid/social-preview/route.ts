@@ -4,6 +4,13 @@ import { error, json } from "@/lib/server/response";
 import type { BmidBoxPlatform } from "@/lib/data/bmid-box";
 
 type PreviewType = "video" | "image" | "post" | "link";
+type YouTubePreview = {
+  videoId: string;
+  title: string;
+  authorName: string;
+  thumbnailUrl: string;
+  canonicalUrl: string;
+};
 
 const META_RE = /<meta\s+[^>]*(?:property|name)=["']([^"']+)["'][^>]*content=["']([^"']*)["'][^>]*>|<meta\s+[^>]*content=["']([^"']*)["'][^>]*(?:property|name)=["']([^"']+)["'][^>]*>/gi;
 const TITLE_RE = /<title[^>]*>([\s\S]*?)<\/title>/i;
@@ -44,6 +51,76 @@ function detectPlatform(url: URL): BmidBoxPlatform {
   if (host.includes("facebook.com") || host.includes("fb.watch")) return "facebook";
   if (host.includes("twitter.com") || host.includes("x.com")) return "x";
   return "generic";
+}
+
+function youtubeVideoId(url: URL) {
+  const host = url.hostname.replace(/^www\./, "").toLowerCase();
+  if (host === "youtu.be") return clean(url.pathname.split("/").filter(Boolean)[0]);
+  if (host.includes("youtube.com")) {
+    if (url.pathname === "/watch") return clean(url.searchParams.get("v"));
+    const segments = url.pathname.split("/").filter(Boolean);
+    const markerIndex = segments.findIndex((segment) => ["embed", "shorts", "live"].includes(segment.toLowerCase()));
+    if (markerIndex >= 0) return clean(segments[markerIndex + 1]);
+  }
+  return "";
+}
+
+function youtubeCanonicalUrl(videoId: string) {
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+}
+
+function youtubeFallbackThumbnail(videoId: string) {
+  return `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`;
+}
+
+function isGenericYouTubeText(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return (
+    !normalized ||
+    normalized === "youtube" ||
+    normalized === "- youtube" ||
+    normalized === "youtube - youtube" ||
+    normalized.includes("enjoy the videos and music you love")
+  );
+}
+
+async function fetchYouTubePreview(url: URL, signal: AbortSignal): Promise<YouTubePreview | null> {
+  const videoId = youtubeVideoId(url);
+  if (!videoId) return null;
+
+  const canonicalUrl = youtubeCanonicalUrl(videoId);
+  const fallback: YouTubePreview = {
+    videoId,
+    title: "",
+    authorName: "",
+    thumbnailUrl: youtubeFallbackThumbnail(videoId),
+    canonicalUrl,
+  };
+
+  try {
+    const oembed = new URL("https://www.youtube.com/oembed");
+    oembed.searchParams.set("url", canonicalUrl);
+    oembed.searchParams.set("format", "json");
+
+    const resp = await fetch(oembed.toString(), {
+      headers: {
+        accept: "application/json",
+        "user-agent": "BiomeDashboardSocialPreview/1.0",
+      },
+      signal,
+    });
+    if (!resp.ok) return fallback;
+
+    const data = await resp.json() as Record<string, unknown>;
+    return {
+      ...fallback,
+      title: clean(data.title),
+      authorName: clean(data.author_name),
+      thumbnailUrl: clean(data.thumbnail_url) || fallback.thumbnailUrl,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 function isExplicitVideoPath(platform: BmidBoxPlatform, url: URL) {
@@ -176,6 +253,7 @@ export async function POST(req: NextRequest) {
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
+    const youtubePreview = platform === "youtube" ? await fetchYouTubePreview(parsed, controller.signal) : null;
     const resp = await fetch(parsed.toString(), {
       headers: {
         accept: "text/html,application/xhtml+xml",
@@ -186,6 +264,25 @@ export async function POST(req: NextRequest) {
     });
 
     if (resp.status === 401 || resp.status === 403 || resp.status === 404) {
+      if (youtubePreview) {
+        return json({
+          success: true,
+          data: {
+            platform,
+            type: "video",
+            title: youtubePreview.title,
+            caption: "",
+            description: "",
+            authorName: youtubePreview.authorName,
+            thumbnailUrl: youtubePreview.thumbnailUrl,
+            videoUrl: null,
+            embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(youtubePreview.videoId)}`,
+            canonicalUrl: youtubePreview.canonicalUrl,
+            externalUrl: parsed.toString(),
+            status: "ready",
+          },
+        });
+      }
       return json({
         success: true,
         data: {
@@ -199,6 +296,25 @@ export async function POST(req: NextRequest) {
     }
 
     if (!resp.ok) {
+      if (youtubePreview) {
+        return json({
+          success: true,
+          data: {
+            platform,
+            type: "video",
+            title: youtubePreview.title,
+            caption: "",
+            description: "",
+            authorName: youtubePreview.authorName,
+            thumbnailUrl: youtubePreview.thumbnailUrl,
+            videoUrl: null,
+            embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(youtubePreview.videoId)}`,
+            canonicalUrl: youtubePreview.canonicalUrl,
+            externalUrl: parsed.toString(),
+            status: "ready",
+          },
+        });
+      }
       return error("preview_unavailable", 502, {
         detail: "The platform did not return preview information.",
       });
@@ -230,14 +346,28 @@ export async function POST(req: NextRequest) {
     const videoUrl = absoluteUrl(clean(meta.get("og:video:secure_url") || meta.get("og:video:url") || meta.get("og:video")), base);
     const title = clean(meta.get("og:title") || meta.get("twitter:title") || meta.get("title"));
     const description = clean(meta.get("og:description") || meta.get("twitter:description") || meta.get("description"));
+    const resolvedTitle =
+      platform === "youtube" && isGenericYouTubeText(title)
+        ? youtubePreview?.title || ""
+        : title || youtubePreview?.title || "";
+    const resolvedDescription =
+      platform === "youtube" && isGenericYouTubeText(description)
+        ? ""
+        : description;
+    const resolvedThumbnailUrl = thumbnailUrl || youtubePreview?.thumbnailUrl || "";
+    const resolvedCanonical = youtubePreview?.canonicalUrl || canonical;
+    const resolvedAuthor = pickAuthor(meta) || youtubePreview?.authorName || "";
+    const resolvedEmbedUrl =
+      embedUrl ||
+      (youtubePreview ? `https://www.youtube.com/embed/${encodeURIComponent(youtubePreview.videoId)}` : null);
 
-    if (!title && !description && !thumbnailUrl) {
+    if (!resolvedTitle && !resolvedDescription && !resolvedThumbnailUrl) {
       return json({
         success: true,
         data: {
           platform,
           type: "post",
-          canonicalUrl: canonical,
+          canonicalUrl: resolvedCanonical,
           externalUrl: parsed.toString(),
           status: "unavailable",
         },
@@ -248,15 +378,15 @@ export async function POST(req: NextRequest) {
       success: true,
       data: {
         platform,
-        type: inferType(platform, new URL(canonical || base.toString()), meta, html),
-        title,
-        caption: description,
-        description,
-        authorName: pickAuthor(meta),
-        thumbnailUrl,
+        type: inferType(platform, new URL(resolvedCanonical || base.toString()), meta, html),
+        title: resolvedTitle,
+        caption: resolvedDescription,
+        description: resolvedDescription,
+        authorName: resolvedAuthor,
+        thumbnailUrl: resolvedThumbnailUrl,
         videoUrl: videoUrl || null,
-        embedUrl: embedUrl || null,
-        canonicalUrl: canonical,
+        embedUrl: resolvedEmbedUrl,
+        canonicalUrl: resolvedCanonical,
         externalUrl: parsed.toString(),
         status: "ready",
       },
@@ -264,6 +394,28 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       return error("preview_timeout", 504, { detail: "Preview request timed out." });
+    }
+    if (platform === "youtube") {
+      const videoId = youtubeVideoId(parsed);
+      if (videoId) {
+        return json({
+          success: true,
+          data: {
+            platform,
+            type: "video",
+            title: "",
+            caption: "",
+            description: "",
+            authorName: "",
+            thumbnailUrl: youtubeFallbackThumbnail(videoId),
+            videoUrl: null,
+            embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`,
+            canonicalUrl: youtubeCanonicalUrl(videoId),
+            externalUrl: parsed.toString(),
+            status: "ready",
+          },
+        });
+      }
     }
     return error("preview_failed", 502, {
       detail: "Preview could not be loaded. You can still enter the information manually.",

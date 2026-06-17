@@ -111,6 +111,10 @@ function validText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0 && value.trim() !== "null" && value.trim() !== "undefined";
 }
 
+function sanitizeSocialUrlInput(value: string) {
+  return value.trim().replace(/[),.]+$/g, "");
+}
+
 function isValidHttpUrl(value: string) {
   try {
     const url = new URL(value);
@@ -272,7 +276,8 @@ export function RequestsTab() {
   }, [dirtyFields]);
 
   const loadSocialPreview = useCallback(async (url: string, options: { force?: boolean } = {}) => {
-    const trimmed = url.trim();
+    const original = url.trim();
+    const trimmed = sanitizeSocialUrlInput(url);
     if (!trimmed) {
       setPreviewState("idle");
       setPreviewError(null);
@@ -287,6 +292,9 @@ export function RequestsTab() {
     }
     if (!apiToken) return;
     if (!options.force && lastFetchedUrlRef.current === trimmed) return;
+    if (original && original !== trimmed) {
+      setForm((current) => current.sourceUrl.trim() === original ? { ...current, sourceUrl: trimmed } : current);
+    }
 
     const requestId = activePreviewRequestRef.current + 1;
     activePreviewRequestRef.current = requestId;
@@ -329,14 +337,15 @@ export function RequestsTab() {
   function submitCreate() {
     setFormError(null);
     if (!form.owner) return setFormError("Select an owner user");
-    if (!form.sourceUrl.trim()) return setFormError("Source URL is required");
+    const sourceUrl = sanitizeSocialUrlInput(form.sourceUrl);
+    if (!sourceUrl) return setFormError("Source URL is required");
     if (form.type === "duality" && form.tagged.length === 0) return setFormError("Duality requests need at least one tagged user");
 
     const payload: Record<string, unknown> = {
       ownerUserId: form.owner.id,
       ownerName: form.owner.displayName,
       type: form.type,
-      sourceUrl: form.sourceUrl.trim(),
+      sourceUrl,
       sourcePlatform: form.platform,
       actorName: "Admin (test)",
       previewData: {

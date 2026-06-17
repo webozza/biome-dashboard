@@ -11,6 +11,13 @@ type YouTubePreview = {
   thumbnailUrl: string;
   canonicalUrl: string;
 };
+type TikTokPreview = {
+  videoId: string;
+  title: string;
+  authorName: string;
+  thumbnailUrl: string;
+  canonicalUrl: string;
+};
 
 const META_RE = /<meta\s+[^>]*(?:property|name)=["']([^"']+)["'][^>]*content=["']([^"']*)["'][^>]*>|<meta\s+[^>]*content=["']([^"']*)["'][^>]*(?:property|name)=["']([^"']+)["'][^>]*>/gi;
 const TITLE_RE = /<title[^>]*>([\s\S]*?)<\/title>/i;
@@ -32,6 +39,10 @@ function clean(value: unknown) {
   const trimmed = decodeHtml(value).trim();
   if (!trimmed || trimmed === "null" || trimmed === "undefined") return "";
   return trimmed;
+}
+
+function cleanSubmittedUrl(value: unknown) {
+  return clean(value).replace(/[),.]+$/g, "");
 }
 
 function absoluteUrl(value: string, base: URL) {
@@ -73,6 +84,21 @@ function youtubeFallbackThumbnail(videoId: string) {
   return `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`;
 }
 
+function tiktokVideoId(url: URL) {
+  const host = url.hostname.replace(/^www\./, "").toLowerCase();
+  if (!host.includes("tiktok.com")) return "";
+  const segments = url.pathname.split("/").filter(Boolean);
+  const markerIndex = segments.findIndex((segment) => segment.toLowerCase() === "video");
+  return markerIndex >= 0 ? clean(segments[markerIndex + 1]) : "";
+}
+
+function tiktokCanonicalUrl(url: URL, videoId: string) {
+  const segments = url.pathname.split("/").filter(Boolean);
+  const author = segments.find((segment) => segment.startsWith("@"));
+  if (author && videoId) return `https://www.tiktok.com/${author}/video/${encodeURIComponent(videoId)}`;
+  return `https://www.tiktok.com${url.pathname}`;
+}
+
 function isGenericYouTubeText(value: string) {
   const normalized = value.trim().toLowerCase();
   return (
@@ -81,6 +107,17 @@ function isGenericYouTubeText(value: string) {
     normalized === "- youtube" ||
     normalized === "youtube - youtube" ||
     normalized.includes("enjoy the videos and music you love")
+  );
+}
+
+function isGenericTikTokText(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return (
+    !normalized ||
+    normalized === "tiktok" ||
+    normalized === "tiktok - make your day" ||
+    normalized === "make your day" ||
+    normalized.includes("make your day")
   );
 }
 
@@ -120,6 +157,37 @@ async function fetchYouTubePreview(url: URL, signal: AbortSignal): Promise<YouTu
     };
   } catch {
     return fallback;
+  }
+}
+
+async function fetchTikTokPreview(url: URL, signal: AbortSignal): Promise<TikTokPreview | null> {
+  const videoId = tiktokVideoId(url);
+  if (!videoId) return null;
+
+  const canonicalUrl = tiktokCanonicalUrl(url, videoId);
+  try {
+    const oembed = new URL("https://www.tiktok.com/oembed");
+    oembed.searchParams.set("url", canonicalUrl);
+
+    const resp = await fetch(oembed.toString(), {
+      headers: {
+        accept: "application/json",
+        "user-agent": "BiomeDashboardSocialPreview/1.0",
+      },
+      signal,
+    });
+    if (!resp.ok) return null;
+
+    const data = await resp.json() as Record<string, unknown>;
+    return {
+      videoId,
+      title: clean(data.title),
+      authorName: clean(data.author_name),
+      thumbnailUrl: clean(data.thumbnail_url),
+      canonicalUrl,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -236,7 +304,7 @@ export async function POST(req: NextRequest) {
     return error("invalid_json", 400);
   }
 
-  const rawUrl = clean(body.url);
+  const rawUrl = cleanSubmittedUrl(body.url);
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
@@ -254,6 +322,27 @@ export async function POST(req: NextRequest) {
 
   try {
     const youtubePreview = platform === "youtube" ? await fetchYouTubePreview(parsed, controller.signal) : null;
+    const tiktokPreview = platform === "tiktok" ? await fetchTikTokPreview(parsed, controller.signal) : null;
+    if (tiktokPreview) {
+      return json({
+        success: true,
+        data: {
+          platform,
+          type: "video",
+          title: tiktokPreview.title,
+          caption: tiktokPreview.title,
+          description: tiktokPreview.title,
+          authorName: tiktokPreview.authorName,
+          thumbnailUrl: tiktokPreview.thumbnailUrl,
+          videoUrl: null,
+          embedUrl: null,
+          canonicalUrl: tiktokPreview.canonicalUrl,
+          externalUrl: parsed.toString(),
+          status: "ready",
+        },
+      });
+    }
+
     const resp = await fetch(parsed.toString(), {
       headers: {
         accept: "text/html,application/xhtml+xml",
@@ -349,10 +438,14 @@ export async function POST(req: NextRequest) {
     const resolvedTitle =
       platform === "youtube" && isGenericYouTubeText(title)
         ? youtubePreview?.title || ""
+        : platform === "tiktok" && isGenericTikTokText(title)
+          ? ""
         : title || youtubePreview?.title || "";
     const resolvedDescription =
       platform === "youtube" && isGenericYouTubeText(description)
         ? ""
+        : platform === "tiktok" && isGenericTikTokText(description)
+          ? ""
         : description;
     const resolvedThumbnailUrl = thumbnailUrl || youtubePreview?.thumbnailUrl || "";
     const resolvedCanonical = youtubePreview?.canonicalUrl || canonical;

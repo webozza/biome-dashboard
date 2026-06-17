@@ -136,7 +136,22 @@ export default function ContentRequestDetailPage() {
     onError: (err: unknown) => setVoteError((err as Error).message),
   });
 
-  const isMutating = patchMutation.isPending || deleteMutation.isPending;
+  const finalizeMutation = useMutation({
+    mutationFn: async () => {
+      const resp = await fetch(`/api/voting/${id}`, {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${apiToken}`, "content-type": "application/json" },
+        body: JSON.stringify({ status: "finalized" }),
+      });
+      return readJson<unknown>(resp);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["content", "request", id] });
+      queryClient.invalidateQueries({ queryKey: ["content", "list"] });
+    },
+  });
+
+  const isMutating = patchMutation.isPending || deleteMutation.isPending || finalizeMutation.isPending;
   const selected = detailQuery.data;
 
   async function handleStatusUpdate(status: string) {
@@ -230,6 +245,20 @@ export default function ContentRequestDetailPage() {
                 )}
               </>
             )}
+            {votingOpen ? (
+              <button
+                onClick={() => void finalizeMutation.mutateAsync()}
+                disabled={isMutating}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-emerald-600 disabled:opacity-50"
+              >
+                {finalizeMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-4 w-4" />
+                )}
+                Finalize
+              </button>
+            ) : null}
             <button
               onClick={() => void deleteMutation.mutateAsync()}
               disabled={isMutating}

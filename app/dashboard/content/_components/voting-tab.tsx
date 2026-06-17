@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ThumbsUp, Minus, ThumbsDown, Trash2 } from "lucide-react";
+import { CheckCircle, Lock, RotateCcw, ThumbsUp, Minus, ThumbsDown, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DataTable } from "@/components/ui/data-table";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
@@ -46,6 +46,23 @@ export function VotingTab() {
     onSuccess: (_, ids) => {
       setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
       setPendingDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["content"] });
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "open" | "closed" | "finalized" }) => {
+      const resp = await fetch(`/api/voting/${id}`, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${apiToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ status }),
+      });
+      return readJson(resp);
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["content"] });
     },
   });
@@ -161,18 +178,65 @@ export function VotingTab() {
       key: "actions",
       label: "",
       render: (r: ContentDoc) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setPendingDelete([r.id]);
-          }}
-          className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#ef4444] hover:bg-[#ef4444]/10 border border-transparent hover:border-[#ef4444]/20 transition-colors"
-          title="Delete request"
-          aria-label="Delete request"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        <div className="flex items-center justify-end gap-1">
+          {r.votingStatus === "open" ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                statusMutation.mutate({ id: r.id, status: "closed" });
+              }}
+              disabled={statusMutation.isPending}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-amber-300 hover:bg-amber-500/10 border border-transparent hover:border-amber-500/20 transition-colors disabled:opacity-50"
+              title="Close voting"
+              aria-label="Close voting"
+            >
+              <Lock className="w-4 h-4" />
+            </button>
+          ) : null}
+          {r.votingStatus === "closed" ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                statusMutation.mutate({ id: r.id, status: "open" });
+              }}
+              disabled={statusMutation.isPending}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-sky-300 hover:bg-sky-500/10 border border-transparent hover:border-sky-500/20 transition-colors disabled:opacity-50"
+              title="Reopen voting"
+              aria-label="Reopen voting"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          ) : null}
+          {r.votingStatus !== "finalized" ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                statusMutation.mutate({ id: r.id, status: "finalized" });
+              }}
+              disabled={statusMutation.isPending}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-emerald-300 hover:bg-emerald-500/10 border border-transparent hover:border-emerald-500/20 transition-colors disabled:opacity-50"
+              title="Finalize voting"
+              aria-label="Finalize voting"
+            >
+              <CheckCircle className="w-4 h-4" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPendingDelete([r.id]);
+            }}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#ef4444] hover:bg-[#ef4444]/10 border border-transparent hover:border-[#ef4444]/20 transition-colors"
+            title="Delete request"
+            aria-label="Delete request"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       ),
     },
   ];

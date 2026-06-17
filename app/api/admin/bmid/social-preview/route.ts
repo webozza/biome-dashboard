@@ -281,6 +281,23 @@ function pickAuthor(meta: Map<string, string>) {
   );
 }
 
+function extractJsonStringField(html: string, field: string) {
+  const match = html.match(new RegExp(`"${field}":"((?:\\\\.|[^"\\\\])*)"`, "i"));
+  if (!match?.[1]) return "";
+  try {
+    return clean(JSON.parse(`"${match[1]}"`));
+  } catch {
+    return clean(match[1]);
+  }
+}
+
+function extractYouTubeShortDescription(html: string) {
+  return (
+    extractJsonStringField(html, "shortDescription") ||
+    extractJsonStringField(html, "description")
+  );
+}
+
 export const dynamic = "force-dynamic";
 
 async function requirePreviewAccess(req: NextRequest) {
@@ -427,6 +444,7 @@ export async function POST(req: NextRequest) {
     const html = await resp.text();
     const meta = parseMeta(html);
     const base = new URL(resp.url || parsed.toString());
+    const youtubeDescription = platform === "youtube" ? extractYouTubeShortDescription(html) : "";
     const canonical =
       absoluteUrl(clean(meta.get("og:url") || meta.get("twitter:url")), base) ||
       base.toString();
@@ -442,11 +460,12 @@ export async function POST(req: NextRequest) {
           ? ""
         : title || youtubePreview?.title || "";
     const resolvedDescription =
-      platform === "youtube" && isGenericYouTubeText(description)
-        ? ""
+      platform === "youtube"
+        ? youtubeDescription || (isGenericYouTubeText(description) ? "" : description)
         : platform === "tiktok" && isGenericTikTokText(description)
           ? ""
         : description;
+    const resolvedCaption = platform === "youtube" ? resolvedTitle : resolvedDescription;
     const resolvedThumbnailUrl = thumbnailUrl || youtubePreview?.thumbnailUrl || "";
     const resolvedCanonical = youtubePreview?.canonicalUrl || canonical;
     const resolvedAuthor = pickAuthor(meta) || youtubePreview?.authorName || "";
@@ -473,7 +492,7 @@ export async function POST(req: NextRequest) {
         platform,
         type: inferType(platform, new URL(resolvedCanonical || base.toString()), meta, html),
         title: resolvedTitle,
-        caption: resolvedDescription,
+        caption: resolvedCaption,
         description: resolvedDescription,
         authorName: resolvedAuthor,
         thumbnailUrl: resolvedThumbnailUrl,

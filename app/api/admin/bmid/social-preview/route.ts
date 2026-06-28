@@ -15,6 +15,7 @@ type TikTokPreview = {
   videoId: string;
   title: string;
   authorName: string;
+  authorUsername: string;
   thumbnailUrl: string;
   canonicalUrl: string;
 };
@@ -92,6 +93,14 @@ function tiktokVideoId(url: URL) {
   return markerIndex >= 0 ? clean(segments[markerIndex + 1]) : "";
 }
 
+function tiktokAuthorUsername(url: URL) {
+  const host = url.hostname.replace(/^www\./, "").toLowerCase();
+  if (!host.includes("tiktok.com")) return "";
+  const segments = url.pathname.split("/").filter(Boolean);
+  const author = segments.find((segment) => segment.startsWith("@"));
+  return clean(author?.replace(/^@+/, ""));
+}
+
 function tiktokCanonicalUrl(url: URL, videoId: string) {
   const segments = url.pathname.split("/").filter(Boolean);
   const author = segments.find((segment) => segment.startsWith("@"));
@@ -165,6 +174,7 @@ async function fetchTikTokPreview(url: URL, signal: AbortSignal): Promise<TikTok
   if (!videoId) return null;
 
   const canonicalUrl = tiktokCanonicalUrl(url, videoId);
+  const authorUsername = tiktokAuthorUsername(url);
   try {
     const oembed = new URL("https://www.tiktok.com/oembed");
     oembed.searchParams.set("url", canonicalUrl);
@@ -183,11 +193,32 @@ async function fetchTikTokPreview(url: URL, signal: AbortSignal): Promise<TikTok
       videoId,
       title: clean(data.title),
       authorName: clean(data.author_name),
+      authorUsername,
       thumbnailUrl: clean(data.thumbnail_url),
       canonicalUrl,
     };
   } catch {
     return null;
+  }
+}
+
+async function resolveSocialShareUrl(url: URL, signal: AbortSignal) {
+  try {
+    const resp = await fetch(url.toString(), {
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+        "user-agent": "BiomeDashboardSocialPreview/1.0",
+      },
+      redirect: "follow",
+      signal,
+    });
+    const resolved = clean(resp.url);
+    if (!resolved || resolved === url.toString()) return url;
+
+    const resolvedUrl = new URL(resolved);
+    return ["http:", "https:"].includes(resolvedUrl.protocol) ? resolvedUrl : url;
+  } catch {
+    return url;
   }
 }
 
@@ -333,13 +364,16 @@ export async function POST(req: NextRequest) {
     return error("invalid_social_url", 400, { detail: "Invalid social media URL." });
   }
 
-  const platform = detectPlatform(parsed);
+  let platform = detectPlatform(parsed);
+  let previewUrl = parsed;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
-    const youtubePreview = platform === "youtube" ? await fetchYouTubePreview(parsed, controller.signal) : null;
-    const tiktokPreview = platform === "tiktok" ? await fetchTikTokPreview(parsed, controller.signal) : null;
+    previewUrl = await resolveSocialShareUrl(parsed, controller.signal);
+    platform = detectPlatform(previewUrl);
+    const youtubePreview = platform === "youtube" ? await fetchYouTubePreview(previewUrl, controller.signal) : null;
+    const tiktokPreview = platform === "tiktok" ? await fetchTikTokPreview(previewUrl, controller.signal) : null;
     if (tiktokPreview) {
       return json({
         success: true,
@@ -350,6 +384,7 @@ export async function POST(req: NextRequest) {
           caption: tiktokPreview.title,
           description: tiktokPreview.title,
           authorName: tiktokPreview.authorName,
+          authorUsername: tiktokPreview.authorUsername,
           thumbnailUrl: tiktokPreview.thumbnailUrl,
           videoUrl: null,
           embedUrl: null,
@@ -360,7 +395,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const resp = await fetch(parsed.toString(), {
+    const resp = await fetch(previewUrl.toString(), {
       headers: {
         accept: "text/html,application/xhtml+xml",
         "user-agent": "BiomeDashboardSocialPreview/1.0",
@@ -394,7 +429,7 @@ export async function POST(req: NextRequest) {
         data: {
           platform,
           type: "post",
-          canonicalUrl: parsed.toString(),
+          canonicalUrl: previewUrl.toString(),
           externalUrl: parsed.toString(),
           status: "unavailable",
         },
@@ -433,8 +468,8 @@ export async function POST(req: NextRequest) {
         data: {
           platform,
           type: contentType.startsWith("image/") ? "image" : "link",
-          title: parsed.hostname,
-          canonicalUrl: resp.url || parsed.toString(),
+          title: previewUrl.hostname,
+          canonicalUrl: resp.url || previewUrl.toString(),
           externalUrl: parsed.toString(),
           status: "ready",
         },
@@ -469,6 +504,7 @@ export async function POST(req: NextRequest) {
     const resolvedThumbnailUrl = thumbnailUrl || youtubePreview?.thumbnailUrl || "";
     const resolvedCanonical = youtubePreview?.canonicalUrl || canonical;
     const resolvedAuthor = pickAuthor(meta) || youtubePreview?.authorName || "";
+    const resolvedAuthorUsername = platform === "tiktok" ? tiktokAuthorUsername(new URL(resolvedCanonical || base.toString())) || tiktokAuthorUsername(previewUrl) || tiktokAuthorUsername(parsed) : "";
     const resolvedEmbedUrl =
       embedUrl ||
       (youtubePreview ? `https://www.youtube.com/embed/${encodeURIComponent(youtubePreview.videoId)}` : null);
@@ -495,6 +531,7 @@ export async function POST(req: NextRequest) {
         caption: resolvedCaption,
         description: resolvedDescription,
         authorName: resolvedAuthor,
+        authorUsername: resolvedAuthorUsername,
         thumbnailUrl: resolvedThumbnailUrl,
         videoUrl: videoUrl || null,
         embedUrl: resolvedEmbedUrl,
@@ -508,7 +545,7 @@ export async function POST(req: NextRequest) {
       return error("preview_timeout", 504, { detail: "Preview request timed out." });
     }
     if (platform === "youtube") {
-      const videoId = youtubeVideoId(parsed);
+      const videoId = youtubeVideoId(previewUrl) || youtubeVideoId(parsed);
       if (videoId) {
         return json({
           success: true,

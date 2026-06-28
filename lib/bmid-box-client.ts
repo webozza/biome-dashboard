@@ -40,6 +40,7 @@ export type BmidSocialPreviewData = {
   caption?: string;
   description?: string;
   authorName?: string;
+  authorUsername?: string;
   thumbnailUrl?: string;
   videoUrl?: string | null;
   embedUrl?: string | null;

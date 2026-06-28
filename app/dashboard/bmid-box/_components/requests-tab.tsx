@@ -361,6 +361,7 @@ export function RequestsTab() {
             platform: socialPreview.platform,
             type: socialPreview.type,
             authorName: socialPreview.authorName,
+            authorUsername: socialPreview.authorUsername,
             canonicalUrl: socialPreview.canonicalUrl,
             embedUrl: socialPreview.embedUrl,
             externalUrl: socialPreview.externalUrl,
@@ -854,6 +855,9 @@ export function RequestsTab() {
                       </p>
                       {socialPreview.authorName ? (
                         <p className="text-xs font-medium text-muted">{socialPreview.authorName}</p>
+                      ) : null}
+                      {socialPreview.authorUsername ? (
+                        <p className="text-xs font-black tracking-wide text-primary">@{socialPreview.authorUsername}</p>
                       ) : null}
                       <a
                         href={socialPreview.externalUrl || socialPreview.canonicalUrl || form.sourceUrl}

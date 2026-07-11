@@ -130,6 +130,16 @@ function isGenericTikTokText(value: string) {
   );
 }
 
+function isGenericFacebookText(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return (
+    !normalized ||
+    normalized === "facebook" ||
+    normalized === "facebook - log in or sign up" ||
+    normalized.includes("log in or sign up")
+  );
+}
+
 async function fetchYouTubePreview(url: URL, signal: AbortSignal): Promise<YouTubePreview | null> {
   const videoId = youtubeVideoId(url);
   if (!videoId) return null;
@@ -539,11 +549,15 @@ export async function POST(req: NextRequest) {
         ? youtubePreview?.title || ""
         : platform === "tiktok" && isGenericTikTokText(title)
           ? ""
+        : platform === "facebook" && isGenericFacebookText(title)
+          ? ""
         : title || youtubePreview?.title || "";
     const resolvedDescription =
       platform === "youtube"
         ? youtubeDescription || (isGenericYouTubeText(description) ? "" : description)
         : platform === "tiktok" && isGenericTikTokText(description)
+          ? ""
+        : platform === "facebook" && isGenericFacebookText(description)
           ? ""
         : description;
     const resolvedCaption = platform === "youtube" ? resolvedTitle : resolvedDescription;

@@ -11,7 +11,11 @@ import {
   listFilteredBmidBoxRequests,
 } from "@/lib/server/bmid-box";
 import { notifyAdminRequestCreated } from "@/lib/server/admin-request-email";
-import type { BmidBoxContentType, BmidBoxPlatform } from "@/lib/data/bmid-box";
+import type {
+  BmidBoxContentType,
+  BmidBoxFacebookOwnershipCheck,
+  BmidBoxPlatform,
+} from "@/lib/data/bmid-box";
 
 type UserDoc = {
   id: string;
@@ -83,6 +87,43 @@ function sanitizeSocialPreview(value: unknown) {
     embedUrl: clean(input.embedUrl),
     externalUrl: clean(input.externalUrl),
     status: clean(input.status),
+  };
+}
+
+function sanitizeFacebookOwnershipCheck(value: unknown): BmidBoxFacebookOwnershipCheck | null {
+  if (!value || typeof value !== "object") return null;
+  const input = value as Record<string, unknown>;
+  const status = clean(input.status);
+  if (!["verified", "failed", "needs_connection"].includes(status)) return null;
+
+  return {
+    provider: "facebook",
+    method: clean(input.method) || "profile_url_match",
+    status: status as BmidBoxFacebookOwnershipCheck["status"],
+    sourceUrl: clean(input.sourceUrl),
+    checkedAt: clean(input.checkedAt) || new Date().toISOString(),
+    matchedOwnerId: clean(input.matchedOwnerId) || null,
+    matchedOwnerName: clean(input.matchedOwnerName) || null,
+    connectedProfileUrl: clean(input.connectedProfileUrl) || null,
+    reason: clean(input.reason) || null,
+    message: clean(input.message) || null,
+  };
+}
+
+function sanitizeVerificationChecks(
+  value: unknown,
+  defaults: {
+    ownerVerified: boolean;
+    platformAllowed: boolean;
+    urlReachable: boolean;
+    duplicateUrl: boolean;
+    supportedContentType: boolean;
+  }
+) {
+  const input = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return {
+    ...defaults,
+    facebookOwnership: sanitizeFacebookOwnershipCheck(input.facebookOwnership),
   };
 }
 
@@ -186,6 +227,13 @@ export async function POST(req: NextRequest) {
   const now = new Date().toISOString();
 
   const primaryTagged = taggedUsers[0];
+  const verificationChecks = sanitizeVerificationChecks(body.verificationChecks, {
+    ownerVerified: Boolean(owner.verified),
+    platformAllowed: true,
+    urlReachable: true,
+    duplicateUrl: false,
+    supportedContentType: true,
+  });
 
   await createDoc(
     "bmidBoxRequests",
@@ -225,13 +273,7 @@ export async function POST(req: NextRequest) {
       taggedUserActionNote: type === "own" ? "Own request auto-confirmed" : null,
       ownerVerified: Boolean(owner.verified),
       taggedUserVerified: Boolean(taggedSnapshots[0]?.verified),
-      verificationChecks: {
-        ownerVerified: Boolean(owner.verified),
-        platformAllowed: true,
-        urlReachable: true,
-        duplicateUrl: false,
-        supportedContentType: true,
-      },
+      verificationChecks,
       notificationEvents: [],
       history: [
         {

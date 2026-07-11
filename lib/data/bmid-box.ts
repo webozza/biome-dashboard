@@ -82,12 +82,31 @@ export interface BmidBoxSocialPreview {
   status?: "ready" | "unavailable" | "failed" | string;
 }
 
+export type BmidBoxFacebookOwnershipStatus =
+  | "verified"
+  | "failed"
+  | "needs_connection";
+
+export interface BmidBoxFacebookOwnershipCheck {
+  provider: "facebook";
+  method: string;
+  status: BmidBoxFacebookOwnershipStatus;
+  sourceUrl: string;
+  checkedAt: string;
+  matchedOwnerId: string | null;
+  matchedOwnerName: string | null;
+  connectedProfileUrl: string | null;
+  reason: string | null;
+  message: string | null;
+}
+
 export interface BmidBoxVerificationChecks {
   ownerVerified: boolean;
   platformAllowed: boolean;
   urlReachable: boolean;
   duplicateUrl: boolean;
   supportedContentType: boolean;
+  facebookOwnership?: BmidBoxFacebookOwnershipCheck | null;
 }
 
 export interface BmidBoxNotificationEvent {

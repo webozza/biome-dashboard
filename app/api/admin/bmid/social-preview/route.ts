@@ -247,6 +247,8 @@ function isExplicitVideoPath(platform: BmidBoxPlatform, url: URL) {
 
 function facebookPostId(url: URL) {
   if (detectPlatform(url) !== "facebook") return "";
+  const storyId = clean(url.searchParams.get("story_fbid") || url.searchParams.get("fbid"));
+  if (storyId) return storyId;
   const segments = url.pathname.split("/").filter(Boolean);
   return segments
     .slice()
@@ -329,6 +331,27 @@ function extractYouTubeShortDescription(html: string) {
   );
 }
 
+function facebookFallbackPreview(parsed: URL, previewUrl: URL, detail?: string) {
+  const postId = facebookPostId(previewUrl) || facebookPostId(parsed);
+  return {
+    platform: "facebook" as const,
+    type: isExplicitVideoPath("facebook", previewUrl) ? "video" : "post",
+    title: "Facebook post",
+    caption: postId ? `Post ID ${postId}` : "",
+    description:
+      detail ||
+      "Facebook did not expose public preview text for this link.",
+    authorName: "",
+    authorUsername: "",
+    thumbnailUrl: "",
+    videoUrl: null,
+    embedUrl: null,
+    canonicalUrl: previewUrl.toString(),
+    externalUrl: parsed.toString(),
+    status: "ready",
+  };
+}
+
 export const dynamic = "force-dynamic";
 
 async function requirePreviewAccess(req: NextRequest) {
@@ -353,6 +376,7 @@ export async function POST(req: NextRequest) {
   }
 
   const rawUrl = cleanSubmittedUrl(body.url);
+  console.log("[bmid-social-preview] source_url", { rawUrl });
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
@@ -372,6 +396,11 @@ export async function POST(req: NextRequest) {
   try {
     previewUrl = await resolveSocialShareUrl(parsed, controller.signal);
     platform = detectPlatform(previewUrl);
+    console.log("[bmid-social-preview] resolved_source_url", {
+      rawUrl,
+      resolvedUrl: previewUrl.toString(),
+      platform,
+    });
     const youtubePreview = platform === "youtube" ? await fetchYouTubePreview(previewUrl, controller.signal) : null;
     const tiktokPreview = platform === "tiktok" ? await fetchTikTokPreview(previewUrl, controller.signal) : null;
     if (tiktokPreview) {
@@ -426,13 +455,20 @@ export async function POST(req: NextRequest) {
       }
       return json({
         success: true,
-        data: {
-          platform,
-          type: "post",
-          canonicalUrl: previewUrl.toString(),
-          externalUrl: parsed.toString(),
-          status: "unavailable",
-        },
+        data:
+          platform === "facebook"
+            ? facebookFallbackPreview(
+                parsed,
+                previewUrl,
+                "Facebook did not expose public preview data for this post."
+              )
+            : {
+                platform,
+                type: "post",
+                canonicalUrl: previewUrl.toString(),
+                externalUrl: parsed.toString(),
+                status: "unavailable",
+              },
       });
     }
 
@@ -454,6 +490,16 @@ export async function POST(req: NextRequest) {
             externalUrl: parsed.toString(),
             status: "ready",
           },
+        });
+      }
+      if (platform === "facebook") {
+        return json({
+          success: true,
+          data: facebookFallbackPreview(
+            parsed,
+            previewUrl,
+            "Facebook did not return preview data for this post."
+          ),
         });
       }
       return error("preview_unavailable", 502, {
@@ -510,6 +556,17 @@ export async function POST(req: NextRequest) {
       (youtubePreview ? `https://www.youtube.com/embed/${encodeURIComponent(youtubePreview.videoId)}` : null);
 
     if (!resolvedTitle && !resolvedDescription && !resolvedThumbnailUrl) {
+      if (platform === "facebook") {
+        return json({
+          success: true,
+          data: {
+            ...facebookFallbackPreview(parsed, new URL(resolvedCanonical || base.toString())),
+            type: inferType(platform, new URL(resolvedCanonical || base.toString()), meta, html),
+            authorName: resolvedAuthor,
+            canonicalUrl: resolvedCanonical,
+          },
+        });
+      }
       return json({
         success: true,
         data: {
@@ -542,6 +599,16 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
+      if (platform === "facebook") {
+        return json({
+          success: true,
+          data: facebookFallbackPreview(
+            parsed,
+            previewUrl,
+            "Facebook preview timed out, but the link can still be submitted."
+          ),
+        });
+      }
       return error("preview_timeout", 504, { detail: "Preview request timed out." });
     }
     if (platform === "youtube") {
@@ -565,6 +632,16 @@ export async function POST(req: NextRequest) {
           },
         });
       }
+    }
+    if (platform === "facebook") {
+      return json({
+        success: true,
+        data: facebookFallbackPreview(
+          parsed,
+          previewUrl,
+          "Facebook preview could not be loaded, but the link can still be submitted."
+        ),
+      });
     }
     return error("preview_failed", 502, {
       detail: "Preview could not be loaded. You can still enter the information manually.",

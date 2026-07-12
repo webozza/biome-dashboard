@@ -86,11 +86,25 @@ export type BmidBoxFacebookOwnershipStatus =
   | "verified"
   | "failed"
   | "needs_connection";
+export type BmidBoxYoutubeOwnershipStatus = BmidBoxFacebookOwnershipStatus;
 
 export interface BmidBoxFacebookOwnershipCheck {
   provider: "facebook";
   method: string;
   status: BmidBoxFacebookOwnershipStatus;
+  sourceUrl: string;
+  checkedAt: string;
+  matchedOwnerId: string | null;
+  matchedOwnerName: string | null;
+  connectedProfileUrl: string | null;
+  reason: string | null;
+  message: string | null;
+}
+
+export interface BmidBoxYoutubeOwnershipCheck {
+  provider: "youtube";
+  method: string;
+  status: BmidBoxYoutubeOwnershipStatus;
   sourceUrl: string;
   checkedAt: string;
   matchedOwnerId: string | null;
@@ -107,6 +121,8 @@ export interface BmidBoxVerificationChecks {
   duplicateUrl: boolean;
   supportedContentType: boolean;
   facebookOwnership?: BmidBoxFacebookOwnershipCheck | null;
+  youtubeOwnership?: BmidBoxYoutubeOwnershipCheck | null;
+  manualReviewRequired?: boolean;
 }
 
 export interface BmidBoxNotificationEvent {

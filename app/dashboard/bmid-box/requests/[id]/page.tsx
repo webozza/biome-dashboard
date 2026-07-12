@@ -484,6 +484,12 @@ export default function BmidBoxRequestDetailPage() {
                 ...(request.sourcePlatform === "facebook"
                   ? [["Facebook owner match", request.verificationChecks.facebookOwnership?.status === "verified"]]
                   : []),
+                ...(request.sourcePlatform === "youtube"
+                  ? [["YouTube owner match", request.verificationChecks.youtubeOwnership?.status === "verified"]]
+                  : []),
+                ...(request.verificationChecks.manualReviewRequired
+                  ? [["Manual review required", false]]
+                  : []),
               ].map(([label, passed]) => (
                 <div key={String(label)} className="flex items-center justify-between rounded-lg px-3 py-2 text-xs">
                   <span className="text-main">{label}</span>

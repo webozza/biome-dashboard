@@ -487,6 +487,9 @@ export default function BmidBoxRequestDetailPage() {
                 ...(request.sourcePlatform === "youtube"
                   ? [["YouTube owner match", request.verificationChecks.youtubeOwnership?.status === "verified"]]
                   : []),
+                ...(request.sourcePlatform === "tiktok"
+                  ? [["TikTok owner match", request.verificationChecks.tiktokOwnership?.status === "verified"]]
+                  : []),
                 ...(request.verificationChecks.manualReviewRequired
                   ? [["Manual review required", false]]
                   : []),

@@ -15,6 +15,7 @@ import type {
   BmidBoxContentType,
   BmidBoxFacebookOwnershipCheck,
   BmidBoxPlatform,
+  BmidBoxTikTokOwnershipCheck,
 } from "@/lib/data/bmid-box";
 
 type UserDoc = {
@@ -129,6 +130,25 @@ function sanitizeYoutubeOwnershipCheck(value: unknown) {
   };
 }
 
+function sanitizeTikTokOwnershipCheck(value: unknown): BmidBoxTikTokOwnershipCheck | null {
+  const input = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  if (input.provider !== "tiktok") return null;
+  return {
+    provider: "tiktok",
+    method: typeof input.method === "string" ? input.method : "video_owner_id_match",
+    status: ["verified", "failed", "needs_connection"].includes(String(input.status))
+      ? (String(input.status) as BmidBoxTikTokOwnershipCheck["status"])
+      : "failed",
+    sourceUrl: typeof input.sourceUrl === "string" ? input.sourceUrl : "",
+    checkedAt: typeof input.checkedAt === "string" ? input.checkedAt : new Date().toISOString(),
+    matchedOwnerId: typeof input.matchedOwnerId === "string" ? input.matchedOwnerId : null,
+    matchedOwnerName: typeof input.matchedOwnerName === "string" ? input.matchedOwnerName : null,
+    connectedProfileUrl: typeof input.connectedProfileUrl === "string" ? input.connectedProfileUrl : null,
+    reason: typeof input.reason === "string" ? input.reason : null,
+    message: typeof input.message === "string" ? input.message : null,
+  };
+}
+
 function sanitizeVerificationChecks(
   value: unknown,
   defaults: {
@@ -144,6 +164,7 @@ function sanitizeVerificationChecks(
     ...defaults,
     facebookOwnership: sanitizeFacebookOwnershipCheck(input.facebookOwnership),
     youtubeOwnership: sanitizeYoutubeOwnershipCheck(input.youtubeOwnership),
+    tiktokOwnership: sanitizeTikTokOwnershipCheck(input.tiktokOwnership),
     manualReviewRequired: Boolean(input.manualReviewRequired),
   };
 }

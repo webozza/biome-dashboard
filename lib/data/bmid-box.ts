@@ -87,6 +87,7 @@ export type BmidBoxFacebookOwnershipStatus =
   | "failed"
   | "needs_connection";
 export type BmidBoxYoutubeOwnershipStatus = BmidBoxFacebookOwnershipStatus;
+export type BmidBoxTikTokOwnershipStatus = BmidBoxFacebookOwnershipStatus;
 
 export interface BmidBoxFacebookOwnershipCheck {
   provider: "facebook";
@@ -114,6 +115,19 @@ export interface BmidBoxYoutubeOwnershipCheck {
   message: string | null;
 }
 
+export interface BmidBoxTikTokOwnershipCheck {
+  provider: "tiktok";
+  method: string;
+  status: BmidBoxTikTokOwnershipStatus;
+  sourceUrl: string;
+  checkedAt: string;
+  matchedOwnerId: string | null;
+  matchedOwnerName: string | null;
+  connectedProfileUrl: string | null;
+  reason: string | null;
+  message: string | null;
+}
+
 export interface BmidBoxVerificationChecks {
   ownerVerified: boolean;
   platformAllowed: boolean;
@@ -122,6 +136,7 @@ export interface BmidBoxVerificationChecks {
   supportedContentType: boolean;
   facebookOwnership?: BmidBoxFacebookOwnershipCheck | null;
   youtubeOwnership?: BmidBoxYoutubeOwnershipCheck | null;
+  tiktokOwnership?: BmidBoxTikTokOwnershipCheck | null;
   manualReviewRequired?: boolean;
 }
 

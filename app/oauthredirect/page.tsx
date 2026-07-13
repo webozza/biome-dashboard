@@ -2,13 +2,18 @@ function escapeJs(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-export default function OAuthRedirectPage({
+type OAuthRedirectSearchParams = Record<string, string | string[] | undefined>;
+
+export const dynamic = "force-dynamic";
+
+export default async function OAuthRedirectPage({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: OAuthRedirectSearchParams | Promise<OAuthRedirectSearchParams>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(searchParams || {})) {
+  for (const [key, value] of Object.entries(resolvedSearchParams || {})) {
     if (Array.isArray(value)) {
       for (const item of value) params.append(key, item);
     } else if (typeof value === "string") {

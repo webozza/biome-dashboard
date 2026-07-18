@@ -22,7 +22,7 @@ Working reference for the BMID feature surface. Read this before touching bmid /
 | Collection | Source of truth for | Created by |
 |---|---|---|
 | `contentRequests` | BMID Content requests (own + duality-tagged) | `POST /api/content` |
-| `dualityRequests` | Duality-approval state (source: `"content"` or `"box"`) | `buildDualityRequestFromContent` / `buildDualityRequestFromBox` in `lib/server/bmid.ts` |
+| `dualityRequests` | Share-approval state (source: `"content"` or `"box"`) | `buildDualityRequestFromContent` / `buildDualityRequestFromBox` in `lib/server/bmid.ts` |
 | `votingItems` | Content-source community voting | `ensureVotingSession` in `lib/server/bmid.ts` (called from `PATCH /api/duality/[id]` on approve, `PATCH /api/content/[id]`) |
 | `bmidBoxRequests` | BMID Box requests (own + duality), vote counts stored inline | `POST /api/bmid-box/requests`, seed fixtures in `lib/data/bmid-box.ts` |
 | `bmidBoxSettings/global` | Global BMID Box admin settings | `ensureBmidBoxSeeded` on first read |

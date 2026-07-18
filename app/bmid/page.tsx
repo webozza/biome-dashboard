@@ -7,7 +7,7 @@ const cards = [
   {
     href: "/bmid/transfer",
     title: "Transfer Post",
-    description: "Move a normal in-app post into BMID Content as Own or Duality.",
+    description: "Move a normal in-app post into BMID Content as Origin or Share.",
     icon: ArrowRightLeft,
   },
   {
@@ -18,7 +18,7 @@ const cards = [
   },
   {
     href: "/bmid/respond",
-    title: "Respond To Duality",
+    title: "Respond To Share",
     description: "Accept or decline requests where you are the tagged user.",
     icon: GitBranch,
   },

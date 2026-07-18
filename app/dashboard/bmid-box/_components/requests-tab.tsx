@@ -63,8 +63,8 @@ const statusOptions = [
 ];
 
 const typeOptions = [
-  { value: "own", label: "Own" },
-  { value: "duality", label: "Duality" },
+  { value: "own", label: "Origin" },
+  { value: "duality", label: "Share" },
 ];
 
 const platformOptions = [
@@ -339,7 +339,7 @@ export function RequestsTab() {
     if (!form.owner) return setFormError("Select an owner user");
     const sourceUrl = sanitizeSocialUrlInput(form.sourceUrl);
     if (!sourceUrl) return setFormError("Source URL is required");
-    if (form.type === "duality" && form.tagged.length === 0) return setFormError("Duality requests need at least one tagged user");
+    if (form.type === "duality" && form.tagged.length === 0) return setFormError("Share requests need at least one tagged user");
 
     const payload: Record<string, unknown> = {
       ownerUserId: form.owner.id,

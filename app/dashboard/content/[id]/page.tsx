@@ -371,7 +371,7 @@ export default function ContentRequestDetailPage() {
                 <div className="flex items-center gap-2">
                   <GitBranch className="w-4 h-4 text-purple-400" />
                   <p className="text-xs font-semibold text-purple-300 uppercase tracking-wider">
-                    Duality Pairing
+                    Share Pairing
                   </p>
                 </div>
               </div>

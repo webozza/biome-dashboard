@@ -33,7 +33,7 @@ export default function ContentPage() {
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-main">BMID Content</h1>
           <p className="text-sm font-medium italic text-muted">
-            Monitor post transfers, Own &amp; Duality requests, voting, and audit trail.
+            Monitor post transfers, Origin &amp; Share requests, voting, and audit trail.
           </p>
         </div>
       </div>

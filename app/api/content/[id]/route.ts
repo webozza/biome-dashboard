@@ -178,7 +178,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       }
 
       // Email owner that admin approved + voting opened.
-      // Duality flows go through /api/duality/[id] which sends its own email,
+      // Share flows go through /api/duality/[id] which sends its own email,
       // so we only fire from here for "own" type to avoid double-sending.
       if (existing.type === "own") {
         const ownerUser = await getDoc<UserEmailDoc>("users", existing.userId).catch(() => null);

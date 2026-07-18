@@ -98,7 +98,7 @@ export default function UserTransferPage() {
         <div className="rounded-xl bg-primary/10 p-3 text-primary"><ArrowRightLeft className="w-5 h-5" /></div>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">Transfer To BMID</h1>
-          <p className="text-sm text-muted">Start from one of your normal posts and create an Own or Duality BMID request.</p>
+          <p className="text-sm text-muted">Start from one of your normal posts and create an Origin or Share BMID request.</p>
         </div>
       </div>
 
@@ -117,8 +117,8 @@ export default function UserTransferPage() {
               onClick={() => setType(option)}
               className={`rounded-xl border p-4 text-left ${type === option ? "border-primary/30 bg-primary/5" : "border-white/10 bg-white/[0.02]"}`}
             >
-              <p className="text-sm font-bold uppercase">{option}</p>
-              <p className="mt-1 text-xs text-muted">{option === "own" ? "Transfer as your own BMID request." : "Tag another user for duality review."}</p>
+              <p className="text-sm font-bold uppercase">{option === "own" ? "Origin" : "Share"}</p>
+              <p className="mt-1 text-xs text-muted">{option === "own" ? "Transfer as an Origin BMID request." : "Tag another user for duality review."}</p>
             </button>
           ))}
         </div>

@@ -51,7 +51,7 @@ export default function BmidRespondPage() {
       <div className="flex items-center gap-3">
         <div className="rounded-xl bg-primary/10 p-3 text-primary"><GitBranch className="w-5 h-5" /></div>
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Respond To Duality</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight">Respond To Share</h1>
           <p className="text-sm text-muted">Accept or decline requests where another user tagged you.</p>
         </div>
       </div>

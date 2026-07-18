@@ -345,8 +345,8 @@ export default function AuditPage() {
                 key: "requestType",
                 label: "Type",
                 options: [
-                  { value: "own", label: "Own" },
-                  { value: "duality", label: "Duality" },
+                  { value: "own", label: "Origin" },
+                  { value: "duality", label: "Share" },
                   { value: "verification", label: "Verification" },
                 ],
               },
@@ -356,7 +356,7 @@ export default function AuditPage() {
                 options: [
                   { value: "content", label: "Content" },
                   { value: "box", label: "Box" },
-                  { value: "duality", label: "Duality" },
+                  { value: "duality", label: "Share" },
                   { value: "verification", label: "Verification" },
                   { value: "report", label: "Report" },
                 ],

@@ -154,7 +154,7 @@ export default function DashboardPage() {
         { label: "Pending Verify", value: data.kpi.pendingVerification, icon: Clock, color: "#f59e0b", href: "/dashboard/verification?status=pending" },
         { label: "Content Req", value: data.kpi.pendingContent, icon: FileText, color: "#8b5cf6", href: "/dashboard/content?status=pending" },
         { label: "Box Req", value: data.kpi.pendingBox, icon: Box, color: "#06b6d4", href: "/dashboard/bmid-box?status=pending" },
-        { label: "Duality", value: data.kpi.pendingDuality, icon: GitBranch, color: "#f97316", href: "/dashboard/duality" },
+        { label: "Share", value: data.kpi.pendingDuality, icon: GitBranch, color: "#f97316", href: "/dashboard/duality" },
         { label: "Approved", value: data.kpi.approvedTotal, icon: CheckCircle, color: "#22c55e", href: undefined },
         { label: "Refused", value: data.kpi.refusedTotal, icon: XCircle, color: "#ef4444", href: undefined },
       ]
@@ -388,7 +388,7 @@ export default function DashboardPage() {
                   <Area type="monotone" dataKey="verification" name="Verification" stroke="#10b981" strokeWidth={3} fill="url(#gVerif)" />
                   <Area type="monotone" dataKey="content" name="Content" stroke="#8b5cf6" strokeWidth={3} fill="url(#gContent)" />
                   <Line type="monotone" dataKey="box" name="Box" stroke="#06b6d4" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "var(--surface)" }} />
-                  <Line type="monotone" dataKey="duality" name="Duality" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "var(--surface)" }} />
+                  <Line type="monotone" dataKey="duality" name="Share" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "var(--surface)" }} />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (

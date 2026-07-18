@@ -201,7 +201,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Duality decision history
+    // Share decision history
     for (const d of dualities) {
       const history = (d.decisionHistory || []).concat(d.timeline || []);
       for (let i = 0; i < history.length; i++) {

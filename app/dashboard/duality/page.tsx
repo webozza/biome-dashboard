@@ -358,7 +358,7 @@ export default function DualityPage() {
   ];
 
   if (!apiToken) {
-    return <AuthGate icon={GitBranch} title="Duality Requests" subtitle="Sign in to manage duality requests" />;
+    return <AuthGate icon={GitBranch} title="Share Requests" subtitle="Sign in to manage share requests" />;
   }
 
   return (
@@ -369,7 +369,7 @@ export default function DualityPage() {
             <GitBranch className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-main">Duality Requests</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight text-main">Share Requests</h1>
             <p className="text-sm text-muted font-medium italic">Monitor joint asset ownership and tagging requests</p>
           </div>
         </div>
@@ -464,7 +464,7 @@ export default function DualityPage() {
       <DetailDrawer
         open={Boolean(selectedId)}
         onClose={() => setSelectedId(null)}
-        title={`Duality Case: ${selected?.id ? selected.id.slice(0, 8) + "..." : ""}`}
+        title={`Share Case: ${selected?.id ? selected.id.slice(0, 8) + "..." : ""}`}
       >
         {!selected ? (
           <div className="flex items-center justify-center py-16 text-muted">

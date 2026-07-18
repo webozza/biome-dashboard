@@ -277,7 +277,7 @@ export default function ModerationPage() {
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-main">Safety & Moderation</h1>
             <p className="text-sm font-medium italic text-muted">
-              Review content reports submitted by users and take action on offending posts or reels.
+              Review content reports submitted by users and take action on offending posts or vibes.
             </p>
           </div>
         </div>
@@ -352,7 +352,7 @@ export default function ModerationPage() {
                 label: "Content",
                 options: [
                   { value: "post", label: "Post" },
-                  { value: "reel", label: "Reel" },
+                  { value: "reel", label: "Vibe" },
                 ],
               },
             ]}

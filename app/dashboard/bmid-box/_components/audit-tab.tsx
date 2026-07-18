@@ -125,8 +125,8 @@ export function AuditTab() {
             key: "type",
             label: "Type",
             options: [
-              { value: "own", label: "Own" },
-              { value: "duality", label: "Duality" },
+              { value: "own", label: "Origin" },
+              { value: "duality", label: "Share" },
             ],
           },
           {

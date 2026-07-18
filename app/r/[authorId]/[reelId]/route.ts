@@ -17,7 +17,7 @@ export async function GET(
 
   const resolved = await resolveShare({ authorId, docId: reelId, kind: "reel" });
   if (!resolved) {
-    return new Response("Reel not found", { status: 404 });
+    return new Response("Vibe not found", { status: 404 });
   }
 
   if (format === "json" || debug) {

@@ -312,7 +312,7 @@ export async function POST(req: NextRequest) {
       taggedUserAction: type === "own" ? "accepted" : "pending",
       taggedUsers,
       taggedUserActionAt: type === "own" ? now : null,
-      taggedUserActionNote: type === "own" ? "Own request auto-confirmed" : null,
+      taggedUserActionNote: type === "own" ? "Origin request auto-confirmed" : null,
       ownerVerified: Boolean(owner.verified),
       taggedUserVerified: Boolean(taggedSnapshots[0]?.verified),
       verificationChecks,

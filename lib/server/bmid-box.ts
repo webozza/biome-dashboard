@@ -666,7 +666,7 @@ export async function seedBmidBoxRequests(options: { force?: boolean } = {}) {
       finalizedAt: null,
       taggedUserAction: "accepted" as const,
       taggedUserActionAt: createdAt,
-      taggedUserActionNote: "Own request auto-confirmed",
+      taggedUserActionNote: "Origin request auto-confirmed",
       ownerVerified: true,
       taggedUserVerified: true,
       verificationChecks: {

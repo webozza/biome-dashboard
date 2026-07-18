@@ -60,7 +60,7 @@ After signing in you will see:
 | **Verification** | Approve users who want a blue tick |
 | **BMID Content** | Approve posts that carry a BMID |
 | **BMID Box** | Manage cross-platform posts shared into Biome |
-| **Duality** | Joint-ownership content (two users share one post) |
+| **Share** | Joint-ownership content (two users share one post) |
 | **Voting** | Watch live voting sessions |
 | **Tagged Response** | Users reply to being tagged |
 | **Moderation** | Review reports of bad content |
@@ -136,14 +136,14 @@ BMID Content is where posts made inside Biome ask to carry the BMID mark. Think 
 
 There are two kinds of requests here:
 
-- **Own** — the user claims their own post.
-- **Duality** — the user wants to share the post with another tagged user.
+- **Origin** — the user claims their own post.
+- **Share** — the user wants to share the post with another tagged user.
 
 ### How a BMID Content request flows
 
 1. User submits the post inside the Biome app.
 2. If it is **duality**, the tagged user must accept or decline first.
-3. Once accepted (or if it is own), the request waits in **Admin Review**.
+3. Once accepted (or if it is Origin), the request waits in **Admin Review**.
 4. You (the admin) open it and read the details.
 5. Click **Approve** → voting opens for the community.
 6. Community casts Accept / Ignore / Refuse votes.
@@ -288,7 +288,7 @@ Colors are your friends. They tell you what is happening without reading words.
 | Word | Meaning |
 |------|---------|
 | **BMID** | A unique ID number the system gives to verified users |
-| **Duality** | A post owned by two users together |
+| **Share** | A post owned by two users together |
 | **Voting** | The community deciding yes or no together |
 | **Audit** | A full history of who did what |
 | **Moderation** | Keeping bad content out |

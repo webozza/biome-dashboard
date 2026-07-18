@@ -111,7 +111,7 @@ export default function BmidRespondPage() {
           <GitBranch className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-main">Duality Response</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-main">Share Response</h1>
           <p className="text-sm text-muted font-medium italic">Simulate the tagged user accepting or declining a BMID duality request</p>
         </div>
       </div>

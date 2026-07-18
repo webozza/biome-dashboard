@@ -331,7 +331,7 @@ export async function applyTaggedUserDecision(
           : dualityStatus === "rejected"
             ? "refused"
             : "pending_tagged_user",
-      rejectionReason: dualityStatus === "rejected" ? "Tagged user declined Duality participation" : null,
+      rejectionReason: dualityStatus === "rejected" ? "Tagged user declined Share participation" : null,
       finalizedAt: dualityStatus === "rejected" ? nowIso : null,
       history: [...((box.history as unknown[]) || []), historyEntry],
     });

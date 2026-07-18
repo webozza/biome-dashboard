@@ -208,7 +208,7 @@ export const boxRequests: BoxRequest[] = [
   { id: "br7", userId: "u11", userName: "Avery Brooks", bmidNumber: "BMID-007", sharedUrl: "https://youtube.com/watch?v=music01", platform: "youtube", contentPreview: "Original beat production livestream highlight", status: "approved", adminNotes: [{ note: "Content verified, YouTube link valid", by: "Admin", at: "2026-04-07" }], createdAt: "2026-04-03", updatedAt: "2026-04-07" },
 ];
 
-// ─── Duality Requests ───
+// ─── Share Requests ───
 export const dualityRequests: DualityRequest[] = [
   { id: "dr1", ownerId: "u1", ownerName: "Alex Morgan", taggedUserId: "u2", taggedUserName: "Jordan Lee", taggedUserAction: "accepted", status: "approved", source: "content", decisionHistory: [{ action: "Created", by: "Alex Morgan", at: "2026-03-01" }, { action: "Tagged user accepted", by: "Jordan Lee", at: "2026-03-03" }, { action: "Approved", by: "Admin", at: "2026-03-05" }], timeline: [{ event: "Request created", at: "2026-03-01" }, { event: "Tagged user notified", at: "2026-03-01" }, { event: "Tagged user accepted", at: "2026-03-03" }, { event: "Admin approved", at: "2026-03-05" }], createdAt: "2026-03-01", updatedAt: "2026-03-05" },
   { id: "dr2", ownerId: "u4", ownerName: "Taylor Swift", taggedUserId: "u7", taggedUserName: "Drew Chen", taggedUserAction: "pending", status: "waiting_tagged", source: "content", decisionHistory: [{ action: "Created", by: "Taylor Swift", at: "2026-04-02" }], timeline: [{ event: "Request created", at: "2026-04-02" }, { event: "Tagged user notified", at: "2026-04-02" }], createdAt: "2026-04-02", updatedAt: "2026-04-02" },
@@ -273,7 +273,7 @@ export const recentActivities: Activity[] = [
   { id: "a6", type: "duality", description: "Drew Chen tagged Taylor Swift in content request", user: "Drew Chen", timestamp: "2026-04-06T09:30:00" },
   { id: "a7", type: "refusal", description: "Fitness Challenge by Quinn Davis was refused by community vote", user: "System", timestamp: "2026-04-01T00:00:00" },
   { id: "a8", type: "verification", description: "Verification request rejected: Morgan Blake", user: "Admin", timestamp: "2026-03-18T10:00:00" },
-  { id: "a9", type: "approval", description: "Duality request approved: Alex Morgan & Jordan Lee", user: "Admin", timestamp: "2026-03-05T15:30:00" },
+  { id: "a9", type: "approval", description: "Share request approved: Alex Morgan & Jordan Lee", user: "Admin", timestamp: "2026-03-05T15:30:00" },
   { id: "a10", type: "removal", description: "BMID removed from flagged user account", user: "Super Admin", timestamp: "2026-03-01T08:00:00" },
 ];
 
@@ -313,8 +313,8 @@ export const votingDistributionData = [
 export const sourceBreakdownData = [
   { name: "BMID Content", value: 6 },
   { name: "BMID Box", value: 7 },
-  { name: "Own", value: 10 },
-  { name: "Duality", value: 5 },
+  { name: "Origin", value: 10 },
+  { name: "Share", value: 5 },
 ];
 
 export const platformBreakdownData = [

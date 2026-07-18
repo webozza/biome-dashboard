@@ -254,7 +254,7 @@ export function renderOgPage(args: RenderArgs): string {
       </div>
       <div class="pill">
         <span class="dot"></span>
-        ${reelId ? "Reel" : hasVideo ? "Video post" : "Post"}
+        ${reelId ? "Vibe" : hasVideo ? "Video post" : "Post"}
       </div>
     </div>
 

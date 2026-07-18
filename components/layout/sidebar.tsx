@@ -33,7 +33,7 @@ const navSections = [
       { href: "/dashboard/verification", label: "Verification", icon: ShieldCheck },
       { href: "/dashboard/content", label: "BMID Content", icon: FileText },
       { href: "/dashboard/bmid-box", label: "BMID Box", icon: Box },
-      { href: "/dashboard/duality", label: "Duality", icon: GitBranch },
+      { href: "/dashboard/duality", label: "Share", icon: GitBranch },
     ],
   },
   {

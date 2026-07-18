@@ -33,7 +33,7 @@ export default function BmidRequestsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight">My BMID Requests</h1>
-        <p className="mt-2 text-sm text-muted">Track your Own and Duality request states.</p>
+        <p className="mt-2 text-sm text-muted">Track your Origin and Share request states.</p>
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">

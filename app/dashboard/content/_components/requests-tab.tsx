@@ -396,8 +396,8 @@ export function RequestsTab() {
                 key: "type",
                 label: "Type",
                 options: [
-                  { value: "own", label: "Own" },
-                  { value: "duality", label: "Duality" },
+                  { value: "own", label: "Origin" },
+                  { value: "duality", label: "Share" },
                 ],
               },
             ]}
@@ -500,7 +500,7 @@ export function RequestsTab() {
                         createForm.type === t ? (t === "duality" ? "text-purple-300" : "text-blue-300") : "text-muted"
                       }`}
                     >
-                      {t === "own" ? "Own" : "Duality"}
+                      {t === "own" ? "Origin" : "Share"}
                     </span>
                   </div>
                   <p className="text-[10px] text-muted leading-relaxed">
@@ -676,7 +676,7 @@ export function RequestsTab() {
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white border border-emerald-500/40 rounded-xl text-sm hover:bg-emerald-500 transition-colors disabled:opacity-60"
             >
               {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Create {createForm.type === "own" ? "Own" : "Duality"} Request
+              Create {createForm.type === "own" ? "Origin" : "Share"} Request
             </button>
           </div>
         </div>

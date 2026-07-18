@@ -306,7 +306,7 @@ export function renderContentApprovedEmail(brand: BrandConfig, ctx: ContentAppro
   const subject = "✅ Your BMID content is approved — voting has started";
   const firstName = ctx.ownerName.split(" ")[0] || "there";
   const detailsRows = [
-    { label: "Request type", value: ctx.isDuality ? "Duality content" : "BMID content" },
+    { label: "Request type", value: ctx.isDuality ? "Share content" : "BMID content" },
     { label: "Title", value: ctx.postTitle || "Not provided" },
   ];
   if (ctx.isDuality && ctx.taggedUserName) {
@@ -333,7 +333,7 @@ export function renderContentApprovedEmail(brand: BrandConfig, ctx: ContentAppro
     "Your BMID content has been approved by an admin and community voting is now open.",
     "You'll receive a separate email once voting concludes.",
     ``,
-    `Request type: ${ctx.isDuality ? "Duality content" : "BMID content"}`,
+    `Request type: ${ctx.isDuality ? "Share content" : "BMID content"}`,
     `Title: ${ctx.postTitle || "Not provided"}`,
     ctx.isDuality && ctx.taggedUserName ? `Tagged with: ${ctx.taggedUserName}` : "",
     `Status: Admin approved — voting open`,
@@ -447,7 +447,7 @@ export function renderContentFinalizedEmail(brand: BrandConfig, ctx: Finalizatio
   const firstName = ctx.ownerName.split(" ")[0] || "there";
   const subject = `${copy.subjectPrefix} your BMID content — voting finalized`;
   const detailsRows = [
-    { label: "Request type", value: ctx.isDuality ? "Duality content" : "BMID content" },
+    { label: "Request type", value: ctx.isDuality ? "Share content" : "BMID content" },
     { label: "Title", value: ctx.postTitle || "Not provided" },
   ];
   if (ctx.isDuality && ctx.taggedUserName) {
@@ -482,7 +482,7 @@ export function renderContentFinalizedEmail(brand: BrandConfig, ctx: Finalizatio
     ``,
     copy.intro,
     ``,
-    `Request type: ${ctx.isDuality ? "Duality content" : "BMID content"}`,
+    `Request type: ${ctx.isDuality ? "Share content" : "BMID content"}`,
     `Title: ${ctx.postTitle || "Not provided"}`,
     ctx.isDuality && ctx.taggedUserName ? `Tagged with: ${ctx.taggedUserName}` : "",
     `Outcome: ${copy.statusLabel.replace(/^Final: /, "")}`,

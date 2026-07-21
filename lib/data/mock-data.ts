@@ -21,7 +21,7 @@ export interface VerificationRequest {
   socialAccount: string;
   platform: string;
   documentUrl?: string | null;
-  status: "pending" | "approved" | "rejected" | "removed" | "appealed";
+  status: "pending" | "approved" | "rejected" | "removed" | "appealed" | "cancelled" | "cancel_requested";
   adminNote: string | null;
   rejectionReason: string | null;
   createdAt: string;

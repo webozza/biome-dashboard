@@ -38,6 +38,7 @@ const statusConfig: Record<string, Palette> = {
   appealed: PURPLE,
   in_review: BLUE,
   cancelled: GRAY,
+  cancel_requested: ORANGE,
   waiting_tagged: { bg: "bg-[#ec4899]/10", text: "text-[#ec4899]", dot: "bg-[#ec4899]", border: "border-[#ec4899]/20" },
   open: { bg: "bg-[#0ea5e9]/10", text: "text-[#0ea5e9]", dot: "bg-[#0ea5e9]", border: "border-[#0ea5e9]/20" },
   closed: GRAY,

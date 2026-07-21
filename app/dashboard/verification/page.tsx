@@ -571,6 +571,8 @@ export default function VerificationPage() {
                 { value: "approved", label: "Approved" },
                 { value: "rejected", label: "Rejected" },
                 { value: "appealed", label: "Appealed" },
+                { value: "cancel_requested", label: "Cancellation Requests" },
+                { value: "cancelled", label: "Cancelled" },
                 { value: "removed", label: "Removed" },
               ],
             },
@@ -868,6 +870,16 @@ export default function VerificationPage() {
                 >
                   {patchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
                   Remove Verification
+                </button>
+              )}
+              {selected.status === "cancel_requested" && (
+                <button
+                  onClick={() => void handleStatusUpdate("removed")}
+                  disabled={isMutating}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/20 rounded-xl text-sm font-bold hover:bg-[#f97316]/15 transition-colors disabled:opacity-60"
+                >
+                  {patchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
+                  Approve cancellation
                 </button>
               )}
             </div>

@@ -148,8 +148,13 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const prevStatus = existing.status || null;
   const nextStatus = fresh.status || null;
 
-  // Revoke status if transitioning AWAY from approved
-  if (prevStatus === "approved" && nextStatus !== "approved" && fresh.userId) {
+  // Revoke status if transitioning away from approval, or if admin approves a
+  // verified user's cancellation request by marking it removed.
+  if (
+    fresh.userId &&
+    ((prevStatus === "approved" && nextStatus !== "approved") ||
+      nextStatus === "removed")
+  ) {
     try {
       await revokeApprovedUserState(fresh.userId);
       // Also clear bmidNumber on the request itself since it's no longer valid

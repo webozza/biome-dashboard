@@ -176,6 +176,24 @@ function extractFrameFromVideo(videoPath: string): Promise<string> {
       { windowsHide: true },
       (err, _stdout, stderr) => {
         if (err) return reject(new Error(`ffmpeg failed: ${String(stderr || err.message).trim()}`));
+        // ffmpeg can exit 0 without actually writing outputPath (seen in
+        // production on this deployment) — verify the frame really landed
+        // before handing back a path nothing else will find.
+        let stat: fs.Stats | null = null;
+        try {
+          stat = fs.statSync(outputPath);
+        } catch {
+          stat = null;
+        }
+        if (!stat || stat.size === 0) {
+          return reject(
+            new Error(
+              `ffmpeg exited 0 but produced no frame at ${outputPath}. stderr: ${
+                String(stderr || "").trim().slice(-800) || "(empty)"
+              }`
+            )
+          );
+        }
         resolve(outputPath);
       }
     );

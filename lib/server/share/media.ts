@@ -173,13 +173,14 @@ function extractFrameFromVideo(videoPath: string): Promise<string> {
     const outputPath = path.join(os.tmpdir(), `frame-${uuid()}.jpg`);
     execFile(
       getFfmpegPath(),
-      // -ss AFTER -i forces an accurate (fully-decoded) seek instead of a
-      // fast keyframe-jump seek. Fast seek was landing on empty/broken
-      // output for some sources on this deployment (confirmed: same
-      // command + same video produced a valid frame locally, but "Output
-      // file is empty" here) — likely a decoder/build difference plus at
-      // least one source video having non-monotonic timestamps.
-      ["-y", "-i", videoPath, "-ss", "1", "-frames:v", "1", "-q:v", "2", outputPath],
+      // Seek to 0, not 1s in. Reproduced in a Linux x64 container matching
+      // this deployment's @ffmpeg-installer/ffmpeg build: for videos with
+      // non-monotonic timestamps ("DTS 0 < N out of order"), this specific
+      // ffmpeg build misreads the container duration (a real ~6s video
+      // read back as "Duration: 00:00:01.00") — seeking to -ss 1 then
+      // lands past what ffmpeg believes is EOF, producing zero frames.
+      // -ss 0 always has a frame available regardless of duration parsing.
+      ["-y", "-i", videoPath, "-ss", "0", "-frames:v", "1", "-q:v", "2", outputPath],
       { windowsHide: true },
       (err, _stdout, stderr) => {
         if (err) return reject(new Error(`ffmpeg failed: ${String(stderr || err.message).trim()}`));

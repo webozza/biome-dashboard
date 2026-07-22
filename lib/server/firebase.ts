@@ -76,4 +76,9 @@ export function auth(): admin.auth.Auth {
   return admin.auth();
 }
 
+export function storage(): admin.storage.Storage {
+  initFirebase();
+  return admin.storage();
+}
+
 export { admin };

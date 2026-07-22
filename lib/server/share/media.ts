@@ -8,6 +8,7 @@ import { createRequire } from "module";
 import { execFile } from "child_process";
 import sharp from "sharp";
 import { env } from "./utils";
+import { storage } from "../firebase";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -172,7 +173,13 @@ function extractFrameFromVideo(videoPath: string): Promise<string> {
     const outputPath = path.join(os.tmpdir(), `frame-${uuid()}.jpg`);
     execFile(
       getFfmpegPath(),
-      ["-y", "-ss", "1", "-i", videoPath, "-frames:v", "1", "-q:v", "2", outputPath],
+      // -ss AFTER -i forces an accurate (fully-decoded) seek instead of a
+      // fast keyframe-jump seek. Fast seek was landing on empty/broken
+      // output for some sources on this deployment (confirmed: same
+      // command + same video produced a valid frame locally, but "Output
+      // file is empty" here) — likely a decoder/build difference plus at
+      // least one source video having non-monotonic timestamps.
+      ["-y", "-i", videoPath, "-ss", "1", "-frames:v", "1", "-q:v", "2", outputPath],
       { windowsHide: true },
       (err, _stdout, stderr) => {
         if (err) return reject(new Error(`ffmpeg failed: ${String(stderr || err.message).trim()}`));
@@ -228,39 +235,40 @@ async function bakePauseIconOnImage(inputJpgPath: string): Promise<string> {
   return outPath;
 }
 
+// Was an unauthenticated REST POST — only worked when the target path
+// happened to be publicly writable, which produced the 403s we saw in
+// production. The Admin SDK authenticates via the service account this
+// dashboard already uses for Firestore, same as everywhere else in
+// lib/server, and matches the "download URL with token" format the rest
+// of the app expects for thumbnailURL/photoURL fields.
 async function uploadFrameToStorageREST(localFilePath: string, destPath: string): Promise<string> {
   const bucket = env("FIREBASE_STORAGE_BUCKET", "project-v-f2d15.firebasestorage.app");
-  const fileBuffer = fs.readFileSync(localFilePath);
-  const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o?name=${encodeURIComponent(
-    destPath
-  )}&uploadType=media`;
-
-  const resp = await fetch(uploadUrl, {
-    method: "POST",
-    headers: { "Content-Type": "image/jpeg" },
-    body: fileBuffer,
+  const token = uuid();
+  await storage().bucket(bucket).upload(localFilePath, {
+    destination: destPath,
+    metadata: {
+      contentType: "image/jpeg",
+      metadata: { firebaseStorageDownloadTokens: token },
+    },
   });
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`Storage upload failed: ${resp.status} ${body}`);
-  }
-  const meta = (await resp.json()) as { name: string; downloadTokens: string };
-  return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(meta.name)}?alt=media&token=${meta.downloadTokens}`;
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(destPath)}?alt=media&token=${token}`;
 }
 
 export async function checkExistingFrame(prefix: string): Promise<string | null> {
   const bucket = env("FIREBASE_STORAGE_BUCKET", "project-v-f2d15.firebasestorage.app");
   const key = `${prefix}/thumb.jpg`;
   try {
-    const resp = await fetch(
-      `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(key)}`
-    );
-    if (resp.ok) {
-      const meta = (await resp.json()) as { name: string; downloadTokens: string };
-      return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(meta.name)}?alt=media&token=${meta.downloadTokens}`;
-    }
-  } catch {}
-  return null;
+    const file = storage().bucket(bucket).file(key);
+    const [exists] = await file.exists();
+    if (!exists) return null;
+    const [metadata] = await file.getMetadata();
+    const tokens = metadata.metadata?.firebaseStorageDownloadTokens as string | undefined;
+    const token = tokens?.split(",")[0];
+    if (!token) return null;
+    return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(key)}?alt=media&token=${token}`;
+  } catch {
+    return null;
+  }
 }
 
 export async function generateFrameFromVideo(videoURL: string, prefix: string): Promise<string> {

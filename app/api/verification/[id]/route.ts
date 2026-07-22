@@ -28,6 +28,7 @@ type VerificationDoc = {
   adminNote?: string | null;
   rejectionReason?: string | null;
   bmidNumber?: string | null;
+  previousBmidNumber?: string | null;
 };
 
 async function ensureApprovedUserState(userId: string): Promise<string | null> {
@@ -38,31 +39,42 @@ async function ensureApprovedUserState(userId: string): Promise<string | null> {
     const userSnap = await tx.get(userRef);
     if (!userSnap.exists) return null;
 
-    const userData = userSnap.data() as { bmidNumber?: unknown; verified?: unknown } | undefined;
+    const userData = userSnap.data() as { bmidNumber?: unknown; previousBmidNumber?: unknown; verified?: unknown } | undefined;
     const existingBmidNumber =
       typeof userData?.bmidNumber === "string" && userData.bmidNumber.trim()
         ? userData.bmidNumber.trim()
         : null;
+    const preservedBmidNumber =
+      typeof userData?.previousBmidNumber === "string" && userData.previousBmidNumber.trim()
+        ? userData.previousBmidNumber.trim()
+        : null;
 
-    if (existingBmidNumber) {
+    const reusableBmidNumber = existingBmidNumber || preservedBmidNumber;
+    if (reusableBmidNumber) {
       tx.set(
         userRef,
         {
           verified: true,
+          bmidNumber: reusableBmidNumber,
+          previousBmidNumber: reusableBmidNumber,
+          bmidStatus: "active",
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
       );
-      return existingBmidNumber;
+      return reusableBmidNumber;
     }
 
     const usersSnap = await tx.get(db().collection("users"));
     let maxSequence = RESERVED_BMID_COUNT;
     for (const doc of usersSnap.docs) {
-      const sequence = parseBmidSequence(doc.data().bmidNumber);
-      if (!sequence) continue;
-      const normalizedSequence = normalizeReservedSequence(sequence);
-      if (normalizedSequence > maxSequence) maxSequence = normalizedSequence;
+      const activeSequence = parseBmidSequence(doc.data().bmidNumber);
+      const previousSequence = parseBmidSequence(doc.data().previousBmidNumber);
+      for (const sequence of [activeSequence, previousSequence]) {
+        if (!sequence) continue;
+        const normalizedSequence = normalizeReservedSequence(sequence);
+        if (normalizedSequence > maxSequence) maxSequence = normalizedSequence;
+      }
     }
 
     const newBmidNumber = formatBmidNumber(maxSequence + 1);
@@ -71,6 +83,8 @@ async function ensureApprovedUserState(userId: string): Promise<string | null> {
       {
         verified: true,
         bmidNumber: newBmidNumber,
+        previousBmidNumber: newBmidNumber,
+        bmidStatus: "active",
         updatedAt: new Date().toISOString(),
       },
       { merge: true }
@@ -80,14 +94,31 @@ async function ensureApprovedUserState(userId: string): Promise<string | null> {
 }
 
 async function revokeApprovedUserState(userId: string) {
-  await db().collection("users").doc(userId).set(
+  const userRef = db().collection("users").doc(userId);
+  const userSnap = await userRef.get();
+  const userData = userSnap.data() as { bmidNumber?: unknown; previousBmidNumber?: unknown } | undefined;
+  const existingBmidNumber =
+    typeof userData?.bmidNumber === "string" && userData.bmidNumber.trim()
+      ? userData.bmidNumber.trim()
+      : null;
+  const preservedBmidNumber =
+    existingBmidNumber ||
+    (typeof userData?.previousBmidNumber === "string" && userData.previousBmidNumber.trim()
+      ? userData.previousBmidNumber.trim()
+      : null);
+
+  await userRef.set(
     {
       verified: false,
       bmidNumber: null,
+      previousBmidNumber: preservedBmidNumber,
+      bmidStatus: "cancelled",
       updatedAt: new Date().toISOString(),
     },
     { merge: true }
   );
+
+  return preservedBmidNumber;
 }
 
 export const GET = buildGetOne("verificationRequests");
@@ -156,10 +187,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       nextStatus === "removed")
   ) {
     try {
-      await revokeApprovedUserState(fresh.userId);
+      const preservedBmidNumber = await revokeApprovedUserState(fresh.userId);
       // Also clear bmidNumber on the request itself since it's no longer valid
-      await updateDoc("verificationRequests", id, { bmidNumber: null });
-      fresh = { ...fresh, bmidNumber: null };
+      await updateDoc("verificationRequests", id, { bmidNumber: null, previousBmidNumber: preservedBmidNumber });
+      fresh = { ...fresh, bmidNumber: null, previousBmidNumber: preservedBmidNumber };
     } catch (e) {
       return error("user_revoke_failed", 500, { detail: String((e as Error).message) });
     }

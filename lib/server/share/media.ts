@@ -6,7 +6,6 @@ import https from "https";
 import crypto from "crypto";
 import { createRequire } from "module";
 import { execFile } from "child_process";
-import sharp from "sharp";
 import { env } from "./utils";
 import { storage } from "../firebase";
 
@@ -168,19 +167,12 @@ function downloadVideoToTemp(videoURL: string): Promise<string> {
   });
 }
 
-function extractFrameFromVideo(videoPath: string): Promise<string> {
+function extractFrameAtOffset(videoPath: string, offsetSeconds: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const outputPath = path.join(os.tmpdir(), `frame-${uuid()}.jpg`);
     execFile(
       getFfmpegPath(),
-      // Seek to 0, not 1s in. Reproduced in a Linux x64 container matching
-      // this deployment's @ffmpeg-installer/ffmpeg build: for videos with
-      // non-monotonic timestamps ("DTS 0 < N out of order"), this specific
-      // ffmpeg build misreads the container duration (a real ~6s video
-      // read back as "Duration: 00:00:01.00") — seeking to -ss 1 then
-      // lands past what ffmpeg believes is EOF, producing zero frames.
-      // -ss 0 always has a frame available regardless of duration parsing.
-      ["-y", "-i", videoPath, "-ss", "0", "-frames:v", "1", "-q:v", "2", outputPath],
+      ["-y", "-ss", String(offsetSeconds), "-i", videoPath, "-frames:v", "1", "-q:v", "2", outputPath],
       { windowsHide: true },
       (err, _stdout, stderr) => {
         if (err) return reject(new Error(`ffmpeg failed: ${String(stderr || err.message).trim()}`));
@@ -208,32 +200,17 @@ function extractFrameFromVideo(videoPath: string): Promise<string> {
   });
 }
 
-function buildPlayOverlaySvg(size = 160): Buffer {
-  return Buffer.from(`
-<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
-      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="rgba(0,0,0,0.45)"/>
-    </filter>
-  </defs>
-  <g filter="url(#shadow)">
-    <circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 6}" fill="rgba(0,0,0,0.55)"/>
-    <polygon points="${size * 0.43},${size * 0.3} ${size * 0.43},${size * 0.7} ${size * 0.72},${size * 0.5}" fill="#fff"/>
-  </g>
-</svg>`);
-}
-
-async function bakePauseIconOnImage(inputJpgPath: string): Promise<string> {
-  const outPath = inputJpgPath.replace(/\.jpe?g$/i, "") + "-og.jpg";
-  const meta = await sharp(inputJpgPath).metadata();
-  const shortEdge = Math.min(meta.width || 1080, meta.height || 1920);
-  const overlaySize = Math.max(80, Math.min(200, Math.round(shortEdge * 0.2)));
-  await sharp(inputJpgPath)
-    .resize(1200, 1200, { fit: "inside", withoutEnlargement: true })
-    .composite([{ input: buildPlayOverlaySvg(overlaySize), gravity: "center" }])
-    .jpeg({ quality: 86 })
-    .toFile(outPath);
-  return outPath;
+async function extractFrameFromVideo(videoPath: string): Promise<string> {
+  const offsets = [0, 1, 2];
+  const errors: string[] = [];
+  for (const offset of offsets) {
+    try {
+      return await extractFrameAtOffset(videoPath, offset);
+    } catch (error) {
+      errors.push(`-ss ${offset}: ${(error as Error).message}`);
+    }
+  }
+  throw new Error(`Unable to extract video frame after ${offsets.length} attempts. ${errors.join(" | ")}`);
 }
 
 // Was an unauthenticated REST POST — only worked when the target path
@@ -278,15 +255,12 @@ export async function generateFrameFromVideo(videoURL: string, prefix: string): 
 
   let videoPath: string | null = null;
   let framePath: string | null = null;
-  let bakedPath: string | null = null;
   try {
     videoPath = await downloadVideoToTemp(videoURL);
     framePath = await extractFrameFromVideo(videoPath);
-    bakedPath = await bakePauseIconOnImage(framePath);
-    return await uploadFrameToStorageREST(bakedPath, `${prefix}/thumb.jpg`);
+    return await uploadFrameToStorageREST(framePath, `${prefix}/thumb.jpg`);
   } finally {
     if (videoPath) fs.unlink(videoPath, () => {});
     if (framePath) fs.unlink(framePath, () => {});
-    if (bakedPath) fs.unlink(bakedPath, () => {});
   }
 }

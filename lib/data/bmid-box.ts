@@ -194,6 +194,7 @@ export interface BmidBoxRequest {
 
 export interface BmidBoxSettings {
   allowedPlatforms: BmidBoxPlatform[];
+  tiktokConnectEnabled: boolean;
   embedPreviewEnabled: boolean;
   maxPendingRequestsPerUser: number;
   duplicateUrlRule: "block_exact_match" | "warn_only";
@@ -207,6 +208,7 @@ export interface BmidBoxSettings {
 
 export const bmidBoxSettings: BmidBoxSettings = {
   allowedPlatforms: ["instagram", "tiktok", "youtube", "facebook", "x", "generic"],
+  tiktokConnectEnabled: false,
   embedPreviewEnabled: true,
   maxPendingRequestsPerUser: 3,
   duplicateUrlRule: "block_exact_match",

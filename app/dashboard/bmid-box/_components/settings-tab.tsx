@@ -85,6 +85,21 @@ export function SettingsTab() {
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <label className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">TikTok Connect</span>
+              <select
+                value={currentSettings.tiktokConnectEnabled ? "yes" : "no"}
+                onChange={(event) => setSettings((current) => ({ ...((current || currentSettings) as BmidBoxSettings), tiktokConnectEnabled: event.target.value === "yes" }))}
+                className="mt-3 w-full rounded-xl border border-white/10 bg-transparent px-3 py-2.5 text-sm text-main"
+              >
+                <option value="no">Waiting for review</option>
+                <option value="yes">Enabled</option>
+              </select>
+              <p className="mt-3 text-xs font-medium leading-relaxed text-muted">
+                Enable only after TikTok approves the app. Mobile users will see this without a new app build.
+              </p>
+            </label>
+
+            <label className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">Embed Preview</span>
               <select
                 value={currentSettings.embedPreviewEnabled ? "yes" : "no"}

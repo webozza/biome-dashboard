@@ -133,9 +133,23 @@ export default function ProfilePage() {
   const displayName = profile?.displayName || user?.name || "—";
   const email = profile?.email || user?.email || "—";
   const photoURL = profile?.photoURL || user?.photoURL;
-  const provider = profile?.provider || "—";
+  const authProviderIds = auth.currentUser?.providerData?.map((p) => p.providerId) ?? [];
+  const provider = authProviderIds.length
+    ? authProviderIds.join(", ")
+    : profile?.provider || "—";
   const bio = profile?.bio || "";
-  const isPasswordProvider = provider === "password" || provider === "—";
+  const isPasswordProvider =
+    authProviderIds.includes("password") ||
+    (!authProviderIds.length && (profile?.provider === "password" || !profile?.provider));
+  const isGoogleOnly =
+    authProviderIds.includes("google.com") && !authProviderIds.includes("password");
+  const isAppleOnly =
+    authProviderIds.includes("apple.com") && !authProviderIds.includes("password");
+  const socialProviderLabel = isGoogleOnly
+    ? "Google"
+    : isAppleOnly
+      ? "Apple"
+      : provider;
 
   const canSubmitPw =
     !pwBusy &&
@@ -296,9 +310,17 @@ export default function ProfilePage() {
           </div>
 
           {!isPasswordProvider ? (
-            <p className="text-sm text-muted bg-surface-hover border border-border rounded-xl px-4 py-3">
-              Your account uses {provider} sign-in. Password changes are managed by your provider.
-            </p>
+            <div className="bg-surface-hover border border-border rounded-xl px-4 py-4">
+              <p className="text-sm font-bold text-main">
+                This account signs in with {socialProviderLabel}.
+              </p>
+              <p className="text-sm text-muted mt-1">
+                Password changes are managed from your {socialProviderLabel} account settings.
+              </p>
+              <p className="text-xs text-muted mt-3">
+                Password changes are available only for email and password accounts.
+              </p>
+            </div>
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -373,104 +395,105 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* Reset Password with OTP */}
-        <div className="space-y-4 pt-6 border-t border-border">
-          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted">
-            <Send className="w-3.5 h-3.5" />
-            Forgot your password?
-          </div>
-          <p className="text-sm text-muted">
-            We&apos;ll email you a 6-digit code to reset your password. Useful if you don&apos;t remember your current
-            password.
-          </p>
-
-          {!otpMode ? (
-            <div className="flex items-center gap-3 flex-wrap">
-              <button
-                onClick={handleRequestOtp}
-                disabled={resetBusy || !email || email === "—"}
-                className="btn-secondary flex items-center gap-2"
-              >
-                {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                Send Reset OTP
-              </button>
-              <span className="text-xs text-muted">to {email}</span>
+        {isPasswordProvider && (
+          <div className="space-y-4 pt-6 border-t border-border">
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted">
+              <Send className="w-3.5 h-3.5" />
+              Forgot your password?
             </div>
-          ) : (
-            <div className="space-y-4 bg-surface-hover border border-border rounded-2xl p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-muted mb-2">
-                    6-Digit OTP
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      placeholder="123456"
-                      className="w-full input-premium pl-10"
+            <p className="text-sm text-muted">
+              We&apos;ll email you a 6-digit code to reset your password. Useful if you don&apos;t remember your current
+              password.
+            </p>
+
+            {!otpMode ? (
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={handleRequestOtp}
+                  disabled={resetBusy || !email || email === "—"}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  Send Reset OTP
+                </button>
+                <span className="text-xs text-muted">to {email}</span>
+              </div>
+            ) : (
+              <div className="space-y-4 bg-surface-hover border border-border rounded-2xl p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-muted mb-2">
+                      6-Digit OTP
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="123456"
+                        className="w-full input-premium pl-10"
+                      />
+                      <Hash className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-muted mb-2">
+                      New password
+                    </label>
+                    <PasswordInput
+                      value={otpNewPw}
+                      onChange={setOtpNewPw}
+                      show={showOtpNew}
+                      onToggle={() => setShowOtpNew((v) => !v)}
                     />
-                    <Hash className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-muted mb-2">
+                      Confirm password
+                    </label>
+                    <PasswordInput
+                      value={otpConfirmPw}
+                      onChange={setOtpConfirmPw}
+                      show={showOtpConfirm}
+                      onToggle={() => setShowOtpConfirm((v) => !v)}
+                    />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-muted mb-2">
-                    New password
-                  </label>
-                  <PasswordInput
-                    value={otpNewPw}
-                    onChange={setOtpNewPw}
-                    show={showOtpNew}
-                    onToggle={() => setShowOtpNew((v) => !v)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-muted mb-2">
-                    Confirm password
-                  </label>
-                  <PasswordInput
-                    value={otpConfirmPw}
-                    onChange={setOtpConfirmPw}
-                    show={showOtpConfirm}
-                    onToggle={() => setShowOtpConfirm((v) => !v)}
-                  />
+
+                <div className="flex items-center gap-3 flex-wrap pt-2">
+                  <button
+                    onClick={handleResetWithOtp}
+                    disabled={resetBusy || otp.length !== 6 || otpNewPw.length < 6}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    Reset Password
+                  </button>
+                  <button
+                    onClick={() => setOtpMode(false)}
+                    disabled={resetBusy}
+                    className="btn-ghost text-xs"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
+            )}
 
-              <div className="flex items-center gap-3 flex-wrap pt-2">
-                <button
-                  onClick={handleResetWithOtp}
-                  disabled={resetBusy || otp.length !== 6 || otpNewPw.length < 6}
-                  className="btn-primary flex items-center gap-2"
-                >
-                  {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  Reset Password
-                </button>
-                <button
-                  onClick={() => setOtpMode(false)}
-                  disabled={resetBusy}
-                  className="btn-ghost text-xs"
-                >
-                  Cancel
-                </button>
+            {resetNotice && (
+              <div className="px-4 py-3 rounded-xl bg-primary/5 border border-primary/20 text-xs font-bold text-primary flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {resetNotice}
               </div>
-            </div>
-          )}
-
-          {resetNotice && (
-            <div className="px-4 py-3 rounded-xl bg-primary/5 border border-primary/20 text-xs font-bold text-primary flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              {resetNotice}
-            </div>
-          )}
-          {resetError && (
-            <div className="px-4 py-3 rounded-xl bg-red-500/5 border border-red-500/20 text-xs font-bold text-red-600 flex items-center gap-2">
-              <AlertCircle className="w-3.5 h-3.5" />
-              {resetError}
-            </div>
-          )}
-        </div>
+            )}
+            {resetError && (
+              <div className="px-4 py-3 rounded-xl bg-red-500/5 border border-red-500/20 text-xs font-bold text-red-600 flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5" />
+                {resetError}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <ConfirmModal

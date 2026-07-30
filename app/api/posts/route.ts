@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { guard } from "@/lib/server/guard";
 import { db } from "@/lib/server/firebase";
-import { pickFirstImage, pickVideoThumbnail } from "@/lib/server/share/media";
+import { pickFirstImage, pickVideoThumbnail } from "@/lib/server/share/media-pickers";
 import { error, json } from "@/lib/server/response";
 
 export const dynamic = "force-dynamic";

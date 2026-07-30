@@ -5,9 +5,8 @@ import {
   pickAllImages,
   pickFirstVideo,
   pickVideoThumbnail,
-  generateFrameFromVideo,
-  checkExistingFrame,
-} from "./media";
+} from "./media-pickers";
+import { generateFrameFromVideo, checkExistingFrame } from "./media";
 import { ogProxyUrl } from "./utils";
 
 type AnyRecord = Record<string, unknown>;

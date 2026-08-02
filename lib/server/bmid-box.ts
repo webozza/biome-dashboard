@@ -106,13 +106,22 @@ async function ensureSettingsSeeded() {
   if (existing) {
     const allowedPlatforms = Array.from(new Set([...(existing.allowedPlatforms || []), ...seededSettings.allowedPlatforms]));
     const supportedContentTypes = Array.from(new Set([...(existing.supportedContentTypes || []), ...seededSettings.supportedContentTypes]));
+    const connectDefaults = {
+      instagramConnectEnabled: existing.instagramConnectEnabled ?? seededSettings.instagramConnectEnabled,
+      facebookConnectEnabled: existing.facebookConnectEnabled ?? seededSettings.facebookConnectEnabled,
+      tiktokConnectEnabled: existing.tiktokConnectEnabled ?? seededSettings.tiktokConnectEnabled,
+    };
     if (
       allowedPlatforms.length !== (existing.allowedPlatforms || []).length ||
-      supportedContentTypes.length !== (existing.supportedContentTypes || []).length
+      supportedContentTypes.length !== (existing.supportedContentTypes || []).length ||
+      existing.instagramConnectEnabled === undefined ||
+      existing.facebookConnectEnabled === undefined ||
+      existing.tiktokConnectEnabled === undefined
     ) {
       await updateDoc(SETTINGS_COLLECTION, SETTINGS_DOC_ID, {
         allowedPlatforms,
         supportedContentTypes,
+        ...connectDefaults,
       });
     }
     return;

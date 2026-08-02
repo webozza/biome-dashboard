@@ -194,6 +194,8 @@ export interface BmidBoxRequest {
 
 export interface BmidBoxSettings {
   allowedPlatforms: BmidBoxPlatform[];
+  instagramConnectEnabled: boolean;
+  facebookConnectEnabled: boolean;
   tiktokConnectEnabled: boolean;
   embedPreviewEnabled: boolean;
   maxPendingRequestsPerUser: number;
@@ -208,6 +210,8 @@ export interface BmidBoxSettings {
 
 export const bmidBoxSettings: BmidBoxSettings = {
   allowedPlatforms: ["instagram", "tiktok", "youtube", "facebook", "x", "generic"],
+  instagramConnectEnabled: true,
+  facebookConnectEnabled: true,
   tiktokConnectEnabled: false,
   embedPreviewEnabled: true,
   maxPendingRequestsPerUser: 3,

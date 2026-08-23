@@ -18,13 +18,18 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const reportSnap = await reportRef.get();
     if (!reportSnap.exists) return error("not_found", 404);
 
-    const report = reportSnap.data() as { contentPath?: string };
+    const report = reportSnap.data() as { contentPath?: string; contentType?: string };
     const path = report?.contentPath || "";
     if (!path) return error("missing_content_path", 400);
 
     const segments = path.split("/").filter(Boolean);
     if (segments.length < 2 || segments.length % 2 !== 0) {
       return error("invalid_content_path", 400, { detail: path });
+    }
+    if (report.contentType === "user" || (segments.length === 2 && segments[0] === "users")) {
+      return error("user_delete_disabled", 400, {
+        detail: "Profile reports must be actioned manually; account deletion is disabled from moderation reports.",
+      });
     }
 
     const contentRef = firestore.doc(path);

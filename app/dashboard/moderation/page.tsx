@@ -13,6 +13,8 @@ import {
   Calendar,
   Link as LinkIcon,
   FileText,
+  Siren,
+  UserCircle,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DataTable } from "@/components/ui/data-table";
@@ -35,23 +37,40 @@ type Report = {
   contentPath: string;
   authorId: string;
   reason: string;
+  priority: "standard" | "critical" | string;
+  requiresImmediateReview: boolean;
   additionalInfo: string | null;
   status: ReportStatus;
   createdAt: string | null;
   reviewedAt: string | null;
   reviewedBy: string | null;
   adminNotes: string | null;
+  reportedContent: {
+    exists: boolean;
+    id: string;
+    path: string;
+    type: string;
+    title: string;
+    description: string;
+    imageUrl: string | null;
+    videoUrl: string | null;
+    authorId: string | null;
+    createdAt: string | null;
+  } | null;
 };
 
 type ReportsResponse = {
   items: Report[];
   total: number;
-  counts: { pending: number; reviewed: number; dismissed: number; actioned: number };
+  counts: { pending: number; reviewed: number; dismissed: number; actioned: number; critical: number };
 };
 
 type TabKey = "pending" | "reviewed" | "all";
 
 const REASON_LABELS: Record<string, string> = {
+  child_safety_exploitation: "Child Safety / suspected sexual exploitation",
+  impersonation: "Impersonation",
+  scam_fraud: "Scam or fraud",
   spam: "Spam",
   harassment: "Harassment",
   hate_speech: "Hate speech",
@@ -62,6 +81,17 @@ const REASON_LABELS: Record<string, string> = {
 };
 
 const REASON_OPTIONS = Object.entries(REASON_LABELS).map(([value, label]) => ({ value, label }));
+
+function isCriticalReport(report: Report) {
+  return report.priority === "critical" || report.requiresImmediateReview === true;
+}
+
+function contentTypeLabel(value: string | null | undefined) {
+  if (value === "user") return "Profile";
+  if (value === "reel") return "Vibe";
+  if (value === "post") return "Post";
+  return value || "Content";
+}
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
@@ -169,8 +199,8 @@ export default function ModerationPage() {
     },
   });
 
-  const allItems = reportsQuery.data?.items || [];
-  const counts = reportsQuery.data?.counts || { pending: 0, reviewed: 0, dismissed: 0, actioned: 0 };
+  const allItems = useMemo(() => reportsQuery.data?.items || [], [reportsQuery.data?.items]);
+  const counts = reportsQuery.data?.counts || { pending: 0, reviewed: 0, dismissed: 0, actioned: 0, critical: 0 };
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -183,6 +213,7 @@ export default function ModerationPage() {
         if (!hay.includes(q)) return false;
       }
       if (filters.reason && filters.reason !== "all" && r.reason !== filters.reason) return false;
+      if (filters.priority === "critical" && !isCriticalReport(r)) return false;
       if (filters.contentType && filters.contentType !== "all" && r.contentType !== filters.contentType) return false;
       return true;
     });
@@ -202,7 +233,7 @@ export default function ModerationPage() {
       label: "Type",
       render: (r: Report) => (
         <span className="capitalize text-[10px] font-bold text-main px-2 py-0.5 bg-surface-hover rounded border border-border">
-          {r.contentType || "—"}
+          {contentTypeLabel(r.contentType)}
         </span>
       ),
     },
@@ -211,10 +242,16 @@ export default function ModerationPage() {
       label: "Reason",
       render: (r: Report) => (
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-50 border border-red-200 text-red-700 text-xs font-bold">
             <Flag className="w-3 h-3" />
             {REASON_LABELS[r.reason] || r.reason || "—"}
           </span>
+          {isCriticalReport(r) ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-600 text-white text-[10px] font-black uppercase tracking-widest">
+              <Siren className="w-3 h-3" />
+              Critical
+            </span>
+          ) : null}
         </div>
       ),
     },
@@ -257,7 +294,7 @@ export default function ModerationPage() {
             e.stopPropagation();
             setPendingReportDelete([r.id]);
           }}
-          className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#ef4444] hover:bg-[#ef4444]/10 border border-transparent hover:border-[#ef4444]/20 transition-colors"
+          className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors"
           title="Delete report"
           aria-label="Delete report"
         >
@@ -284,7 +321,7 @@ export default function ModerationPage() {
         {selectedIds.length > 0 && (
           <button
             onClick={() => setPendingReportDelete(selectedIds)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-[#ef4444]/15 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-red-50 text-red-700 border border-red-200 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-red-100 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
             Delete {selectedIds.length}
@@ -292,7 +329,7 @@ export default function ModerationPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
         <TileButton
           label="Pending"
           value={counts.pending}
@@ -325,6 +362,17 @@ export default function ModerationPage() {
           }}
         />
         <TileButton
+          label="Critical"
+          value={counts.critical}
+          tone="danger"
+          active={filters.priority === "critical"}
+          onClick={() => {
+            setTab("all");
+            setFilters((f) => ({ ...f, priority: "critical" }));
+            setCurrentPage(1);
+          }}
+        />
+        <TileButton
           label="All"
           value={counts.pending + counts.reviewed + counts.dismissed + counts.actioned}
           tone="neutral"
@@ -348,11 +396,17 @@ export default function ModerationPage() {
             filters={[
               { key: "reason", label: "Reason", options: REASON_OPTIONS },
               {
+                key: "priority",
+                label: "Priority",
+                options: [{ value: "critical", label: "Critical" }],
+              },
+              {
                 key: "contentType",
                 label: "Content",
                 options: [
                   { value: "post", label: "Post" },
                   { value: "reel", label: "Vibe" },
+                  { value: "user", label: "User/Profile" },
                 ],
               },
             ]}
@@ -369,7 +423,7 @@ export default function ModerationPage() {
         </div>
 
         {reportsQuery.isError ? (
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300 mb-4">
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 mb-4">
             Failed to load reports: {(reportsQuery.error as Error).message}
           </div>
         ) : null}
@@ -408,24 +462,47 @@ export default function ModerationPage() {
       <DetailDrawer
         open={!!selected}
         onClose={() => setSelectedId(null)}
-        title={selected ? `Report ${selected.id.slice(0, 8)}…` : "Report"}
+        title="Report review"
+        subtitle={selected ? `Report ${selected.id.slice(0, 8)}` : "Moderation details"}
+        panelClassName="max-w-lg"
+        bodyClassName="p-6"
       >
         {selected && (
-          <div className="space-y-6 p-1">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Content Type" value={<span className="capitalize">{selected.contentType}</span>} />
-              <Field label="Status" value={<StatusBadge status={selected.status} />} />
-              <Field
-                label="Reason"
-                value={
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold">
-                    <Flag className="w-3 h-3" />
-                    {REASON_LABELS[selected.reason] || selected.reason || "—"}
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-border bg-surface p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Reason</p>
+                  <span className="inline-flex max-w-full items-center gap-1 px-2 py-0.5 rounded-md bg-red-50 border border-red-200 text-red-700 text-xs font-bold">
+                    <Flag className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{REASON_LABELS[selected.reason] || selected.reason || "—"}</span>
                   </span>
-                }
-              />
-              <Field label="Submitted" value={<span>{formatDate(selected.createdAt)}</span>} />
+                </div>
+                <StatusBadge status={selected.status} />
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                <span className="font-semibold text-main">{contentTypeLabel(selected.contentType)}</span>
+                <span>•</span>
+                <span>{formatDate(selected.createdAt)}</span>
+                {isCriticalReport(selected) ? (
+                  <>
+                    <span>•</span>
+                    <span className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-white">
+                      <Siren className="w-3 h-3" />
+                      Critical
+                    </span>
+                  </>
+                ) : null}
+              </div>
             </div>
+
+            {isCriticalReport(selected) ? (
+              <div className="p-3 rounded-xl border border-red-200 bg-red-50 text-sm leading-6 text-red-800">
+                Review urgently. Take action only if the reported profile or content violates policy.
+              </div>
+            ) : null}
+
+            <ReportedContentCard report={selected} content={selected.reportedContent} />
 
             {selected.additionalInfo ? (
               <div className="p-4 rounded-2xl border border-border bg-background">
@@ -447,10 +524,6 @@ export default function ModerationPage() {
                 <FileText className="w-3.5 h-3.5 text-muted" />
                 <code className="text-xs text-main font-mono truncate">{selected.authorId || "—"}</code>
                 <span className="text-[10px] text-muted ml-auto">author</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <LinkIcon className="w-3.5 h-3.5 text-muted" />
-                <code className="text-[11px] text-muted font-mono truncate">{selected.contentPath || "—"}</code>
               </div>
             </div>
 
@@ -485,24 +558,31 @@ export default function ModerationPage() {
                       updateStatusMutation.mutate({ id: selected.id, status: "actioned" })
                     }
                     disabled={updateStatusMutation.isPending}
-                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs font-bold hover:bg-amber-500/15 transition-all active:scale-95 disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold hover:bg-amber-100 transition-all active:scale-95 disabled:opacity-50"
                   >
                     <CheckCircle className="w-3.5 h-3.5" />
                     Take Action
                   </button>
                 </div>
-                <button
-                  onClick={() => setPendingDelete(selected)}
-                  disabled={!selected.contentPath || deleteContentMutation.isPending}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-500/20 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {deleteContentMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                  Delete Content
-                </button>
+                {selected.contentType === "user" ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold leading-5 text-amber-800">
+                    Profile reports are reviewed here. Use Take Action to mark moderator handling;
+                    direct account deletion is intentionally disabled from this queue.
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setPendingDelete(selected)}
+                    disabled={!selected.contentPath || deleteContentMutation.isPending}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-500/20 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {deleteContentMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    Delete Content
+                  </button>
+                )}
               </div>
             ) : (
               <div className="pt-2 border-t border-border">
@@ -525,7 +605,7 @@ export default function ModerationPage() {
         title="Delete reported content?"
         message={
           <span>
-            This will permanently delete the {pendingDelete?.contentType || "content"} at{" "}
+            This will permanently delete the {contentTypeLabel(pendingDelete?.contentType).toLowerCase()} at{" "}
             <code className="text-[11px]">{pendingDelete?.contentPath}</code>. The report will be marked as{" "}
             <strong>actioned</strong>. This cannot be undone.
           </span>
@@ -577,15 +657,16 @@ function TileButton({
 }: {
   label: string;
   value: number;
-  tone: "amber" | "primary" | "muted" | "neutral";
+  tone: "amber" | "primary" | "muted" | "neutral" | "danger";
   active: boolean;
   onClick: () => void;
 }) {
   const toneClasses: Record<typeof tone, string> = {
-    amber: "text-amber-500",
+    amber: "text-amber-600",
     primary: "text-primary",
     muted: "text-muted",
     neutral: "text-main",
+    danger: "text-red-600",
   };
   return (
     <button
@@ -600,11 +681,69 @@ function TileButton({
   );
 }
 
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
+function ReportedContentCard({ report, content }: { report: Report; content: Report["reportedContent"] }) {
   return (
-    <div>
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">{label}</p>
-      <div className="text-sm font-semibold text-main">{value}</div>
+    <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+      <div className="px-4 py-3 border-b border-border bg-background/70 flex items-center justify-between gap-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Reported content</p>
+        <span className="capitalize text-[10px] font-bold text-main px-2 py-0.5 bg-surface-hover rounded border border-border">
+          {contentTypeLabel(content?.type || report.contentType)}
+        </span>
+      </div>
+
+      {content?.imageUrl ? (
+        <div className="bg-background">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={content.imageUrl} alt={content.title} className="w-full max-h-64 object-cover" />
+        </div>
+      ) : (
+        <div className="h-32 bg-gradient-to-br from-emerald-50 via-sky-50 to-amber-50 flex items-center justify-center text-muted">
+          {report.contentType === "user" ? (
+            <UserCircle className="w-10 h-10 opacity-60" />
+          ) : (
+            <FileText className="w-8 h-8 opacity-60" />
+          )}
+        </div>
+      )}
+
+      <div className="p-4 space-y-3">
+        <div>
+          <p className="text-base font-extrabold text-main leading-snug">
+            {content?.title || (report.contentType === "user" ? "Profile preview unavailable" : "Content preview unavailable")}
+          </p>
+          <p className="text-xs text-muted mt-1">
+            {content?.exists === false
+              ? "This item was not found. It may already have been deleted."
+              : content?.description || (report.contentType === "user" ? "No profile details are available." : "No caption or description is available for this content.")}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Created</p>
+            <p className="font-semibold text-main">{formatDate(content?.createdAt || null)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">
+              {report.contentType === "user" ? "User ID" : "Content ID"}
+            </p>
+            <code className="font-mono text-[11px] text-main break-all">{content?.id || report.contentId || "—"}</code>
+          </div>
+        </div>
+
+        {content?.videoUrl ? (
+          <a
+            href={content.videoUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline"
+          >
+            <LinkIcon className="w-3 h-3" />
+            Open video media
+          </a>
+        ) : null}
+
+      </div>
     </div>
   );
 }

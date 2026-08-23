@@ -7,6 +7,7 @@ interface DetailDrawerProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  subtitle?: string;
   children: React.ReactNode;
   variant?: "drawer" | "modal";
   panelClassName?: string;
@@ -17,6 +18,7 @@ export function DetailDrawer({
   open,
   onClose,
   title,
+  subtitle = "Identity Inspection Mode",
   children,
   variant = "drawer",
   panelClassName = "",
@@ -55,7 +57,7 @@ export function DetailDrawer({
                 {title}
               </h2>
               <p className="text-[10px] font-black tracking-[0.3em] text-muted uppercase opacity-50 truncate">
-                Identity Inspection Mode
+                {subtitle}
               </p>
             </div>
             <button

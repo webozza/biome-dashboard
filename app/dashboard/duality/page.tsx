@@ -425,7 +425,7 @@ export default function DualityPage() {
 
         {listQuery.isError && (
           <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300 mb-4">
-            Failed to load duality requests: {listQuery.error.message}
+            Failed to load Share requests: {listQuery.error.message}
           </div>
         )}
 
@@ -717,17 +717,17 @@ export default function DualityPage() {
         open={Boolean(pendingDelete && pendingDelete.length > 0)}
         title={
           pendingDelete && pendingDelete.length > 1
-            ? `Delete ${pendingDelete.length} duality requests?`
-            : "Delete duality request?"
+            ? `Delete ${pendingDelete.length} Share requests?`
+            : "Delete Share request?"
         }
         message={
           pendingDelete && pendingDelete.length > 1 ? (
             <>
-              This permanently removes <strong>{pendingDelete.length}</strong> selected duality requests.
+              This permanently removes <strong>{pendingDelete.length}</strong> selected Share requests.
               This cannot be undone.
             </>
           ) : (
-            <>This permanently removes the selected duality request. This cannot be undone.</>
+            <>This permanently removes the selected Share request. This cannot be undone.</>
           )
         }
         confirmLabel="Delete"

@@ -128,8 +128,8 @@ function buildApprovalAudienceLabel(
   requestType: ApprovalNotificationRequestType
 ): string {
   const sourceLabel = source === "content" ? "BMID content" : "BMID box content";
-  if (requestType === "duality") return `a duality ${sourceLabel}`;
-  return `their own ${sourceLabel}`;
+  if (requestType === "duality") return `a Share ${sourceLabel}`;
+  return `their Origin ${sourceLabel}`;
 }
 
 export function buildApprovalNotificationCopy(input: {

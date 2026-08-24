@@ -96,7 +96,7 @@ export default function BmidRespondPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted">No pending duality requests for you.</p>
+          <p className="text-sm text-muted">No pending Share requests for you.</p>
         )}
       </div>
     </div>

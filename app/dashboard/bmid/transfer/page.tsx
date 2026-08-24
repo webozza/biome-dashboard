@@ -135,12 +135,12 @@ export default function BmidTransferPage() {
             >
               <div className="flex items-center gap-2">
                 {type === "own" ? <FileText className="w-4 h-4 text-blue-300" /> : <GitBranch className="w-4 h-4 text-purple-300" />}
-                <span className="text-sm font-bold uppercase text-main">{type}</span>
+                <span className="text-sm font-bold uppercase text-main">{type === "own" ? "Origin" : "Share"}</span>
               </div>
               <p className="mt-2 text-xs text-muted">
                 {type === "own"
-                  ? "User A transfers their own post into BMID Content."
-                  : "User A transfers a post and tags User B for duality approval."}
+                  ? "User A transfers an Origin post into BMID Content."
+                  : "User A transfers a post and tags User B for Share approval."}
               </p>
             </button>
           ))}

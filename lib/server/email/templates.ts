@@ -350,7 +350,7 @@ export function renderBoxApprovedEmail(brand: BrandConfig, ctx: BoxApprovalConte
   const subject = "✅ Your BMID Box content is approved — voting has started";
   const firstName = ctx.ownerName.split(" ")[0] || "there";
   const detailsRows = [
-    { label: "Request type", value: ctx.isDuality ? "BMID Box (duality)" : "BMID Box" },
+    { label: "Request type", value: ctx.isDuality ? "BMID Box (Share)" : "BMID Box" },
     { label: "Title", value: ctx.previewTitle || "Not provided" },
   ];
   if (ctx.sourcePlatform) {
@@ -380,7 +380,7 @@ export function renderBoxApprovedEmail(brand: BrandConfig, ctx: BoxApprovalConte
     "Your BMID Box content has been approved by an admin and community voting is now open.",
     "You'll receive a separate email once voting concludes.",
     ``,
-    `Request type: ${ctx.isDuality ? "BMID Box (duality)" : "BMID Box"}`,
+    `Request type: ${ctx.isDuality ? "BMID Box (Share)" : "BMID Box"}`,
     `Title: ${ctx.previewTitle || "Not provided"}`,
     ctx.sourcePlatform ? `Platform: ${ctx.sourcePlatform}` : "",
     ctx.isDuality && ctx.taggedUserName ? `Tagged with: ${ctx.taggedUserName}` : "",
@@ -501,7 +501,7 @@ export function renderBoxFinalizedEmail(brand: BrandConfig, ctx: FinalizationCon
   const firstName = ctx.ownerName.split(" ")[0] || "there";
   const subject = `${copy.subjectPrefix} your BMID Box content — voting finalized`;
   const detailsRows = [
-    { label: "Request type", value: ctx.isDuality ? "BMID Box (duality)" : "BMID Box" },
+    { label: "Request type", value: ctx.isDuality ? "BMID Box (Share)" : "BMID Box" },
     { label: "Title", value: ctx.postTitle || "Not provided" },
   ];
   if (ctx.sourcePlatform) {
@@ -539,7 +539,7 @@ export function renderBoxFinalizedEmail(brand: BrandConfig, ctx: FinalizationCon
     ``,
     copy.intro,
     ``,
-    `Request type: ${ctx.isDuality ? "BMID Box (duality)" : "BMID Box"}`,
+    `Request type: ${ctx.isDuality ? "BMID Box (Share)" : "BMID Box"}`,
     `Title: ${ctx.postTitle || "Not provided"}`,
     ctx.sourcePlatform ? `Platform: ${ctx.sourcePlatform}` : "",
     ctx.isDuality && ctx.taggedUserName ? `Tagged with: ${ctx.taggedUserName}` : "",

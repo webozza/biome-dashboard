@@ -51,7 +51,7 @@ export default function BmidLoginPage() {
       <div className="w-full max-w-md rounded-3xl border border-white/10 bg-neutral-950 p-8 shadow-2xl">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-extrabold tracking-tight text-white">BMID User Portal</h1>
-          <p className="mt-2 text-sm text-neutral-400">Sign in as a normal user to transfer posts, respond to duality, and vote.</p>
+          <p className="mt-2 text-sm text-neutral-400">Sign in as a normal user to transfer posts, respond to Share requests, and vote.</p>
         </div>
 
         <form onSubmit={handleEmailLogin} className="space-y-5">

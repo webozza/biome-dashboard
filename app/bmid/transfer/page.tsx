@@ -118,7 +118,7 @@ export default function UserTransferPage() {
               className={`rounded-xl border p-4 text-left ${type === option ? "border-primary/30 bg-primary/5" : "border-white/10 bg-white/[0.02]"}`}
             >
               <p className="text-sm font-bold uppercase">{option === "own" ? "Origin" : "Share"}</p>
-              <p className="mt-1 text-xs text-muted">{option === "own" ? "Transfer as an Origin BMID request." : "Tag another user for duality review."}</p>
+              <p className="mt-1 text-xs text-muted">{option === "own" ? "Transfer as an Origin BMID request." : "Tag another user for Share review."}</p>
             </button>
           ))}
         </div>

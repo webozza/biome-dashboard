@@ -268,7 +268,7 @@ export const recentActivities: Activity[] = [
   { id: "a1", type: "verification", description: "New verification request from Harper Wilson", user: "Harper Wilson", timestamp: "2026-04-12T08:30:00" },
   { id: "a2", type: "flag", description: "Bot-like voting behavior detected", user: "System", timestamp: "2026-04-11T22:15:00" },
   { id: "a3", type: "verification", description: "New verification request from Morgan Blake (reapply)", user: "Morgan Blake", timestamp: "2026-04-10T14:20:00" },
-  { id: "a4", type: "duality", description: "New duality request: Avery Brooks tagged Alex Morgan", user: "Avery Brooks", timestamp: "2026-04-09T11:00:00" },
+  { id: "a4", type: "duality", description: "New Share request: Avery Brooks tagged Alex Morgan", user: "Avery Brooks", timestamp: "2026-04-09T11:00:00" },
   { id: "a5", type: "approval", description: "Box request approved: Beat Production by Avery Brooks", user: "Admin", timestamp: "2026-04-07T16:45:00" },
   { id: "a6", type: "duality", description: "Drew Chen tagged Taylor Swift in content request", user: "Drew Chen", timestamp: "2026-04-06T09:30:00" },
   { id: "a7", type: "refusal", description: "Fitness Challenge by Quinn Davis was refused by community vote", user: "System", timestamp: "2026-04-01T00:00:00" },

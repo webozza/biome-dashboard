@@ -112,7 +112,7 @@ export default function BmidRespondPage() {
         </div>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-main">Share Response</h1>
-          <p className="text-sm text-muted font-medium italic">Simulate the tagged user accepting or declining a BMID duality request</p>
+          <p className="text-sm text-muted font-medium italic">Simulate the tagged user accepting or declining a BMID Share request</p>
         </div>
       </div>
 
@@ -122,11 +122,11 @@ export default function BmidRespondPage() {
           {listQuery.isLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Loading duality requests...
+              Loading Share requests...
             </div>
           ) : listQuery.isError ? (
             <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300">
-              Failed to load waiting duality requests: {listQuery.error.message}
+              Failed to load waiting Share requests: {listQuery.error.message}
             </div>
           ) : listQuery.data?.items.length ? (
             <div className="space-y-3">
@@ -159,14 +159,14 @@ export default function BmidRespondPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted">No duality requests are waiting on tagged-user action.</p>
+            <p className="text-sm text-muted">No Share requests are waiting on tagged-user action.</p>
           )}
         </div>
 
         <div className="card space-y-5">
           <h2 className="text-sm font-black uppercase tracking-[0.2em] text-main">Respond As Tagged User</h2>
           {!selected ? (
-            <p className="text-sm text-muted">Select a waiting duality request to continue.</p>
+            <p className="text-sm text-muted">Select a waiting Share request to continue.</p>
           ) : (
             <>
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">

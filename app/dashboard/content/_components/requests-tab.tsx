@@ -636,7 +636,7 @@ export function RequestsTab() {
             ) : (
               <div className="space-y-1 text-xs text-secondary">
                 <p>1. User A creates a post and transfers to BMID Content</p>
-                <p>2. User A tags one or more users in the duality request</p>
+                <p>2. User A tags one or more users in the Share request</p>
                 <p>3. Tagged users receive notification to accept/decline</p>
                 <p>4. If all tagged users accept, request proceeds to admin review</p>
                 <p>5. Admin approval opens voting for verified users: Accept / Ignore / Refuse</p>

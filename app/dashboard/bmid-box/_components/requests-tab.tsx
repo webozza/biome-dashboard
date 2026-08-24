@@ -684,7 +684,7 @@ export function RequestsTab() {
                             : "border-white/10 bg-white/[0.03] text-muted hover:text-main"
                         }`}
                       >
-                        {value}
+                        {value === "own" ? "Origin" : "Share"}
                       </button>
                     ))}
                   </div>

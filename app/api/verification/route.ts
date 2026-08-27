@@ -32,6 +32,39 @@ function createdAtTime(value: unknown) {
   return Number.isFinite(time) ? time : 0;
 }
 
+function optionalString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function requiredString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function optionalBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : null;
+}
+
+function normalizeVerificationCreatePayload(body: Record<string, unknown>) {
+  return {
+    socialAccount: requiredString(body.socialAccount),
+    platform: requiredString(body.platform),
+    profileUrl: optionalString(body.profileUrl),
+    displayName: optionalString(body.displayName),
+    accountType: optionalString(body.accountType),
+    verificationReason: optionalString(body.verificationReason),
+    activeOneYear: optionalBoolean(body.activeOneYear),
+    representsRealIdentity: optionalBoolean(body.representsRealIdentity),
+    screenshotUrl: optionalString(body.screenshotUrl),
+    agreementAccepted: body.agreementAccepted === true,
+    followerCount: typeof body.followerCount === "number" && Number.isFinite(body.followerCount)
+      ? body.followerCount
+      : null,
+    contentCategory: optionalString(body.contentCategory),
+    country: optionalString(body.country),
+    contactEmail: optionalString(body.contactEmail),
+  };
+}
+
 async function listVerificationRequests(req: NextRequest) {
   const g = guard(req);
   if (g) return g;
@@ -102,8 +135,14 @@ export async function POST(req: NextRequest) {
     try {
       const resolved = await resolveUserByEmail(body.email);
       if (!resolved.ok) return error(resolved.reason, 400);
+      const normalized = normalizeVerificationCreatePayload(body);
+      if (!normalized.socialAccount || !normalized.platform || !normalized.agreementAccepted) {
+        return error("missing_required_fields", 400, {
+          detail: "socialAccount, platform, and agreementAccepted are required.",
+        });
+      }
       const payload: Record<string, unknown> = {
-        ...body,
+        ...normalized,
         userId: resolved.user.id,
         email: resolved.user.email,
         userName:
@@ -135,8 +174,16 @@ export async function POST(req: NextRequest) {
   const user = await requireFirebaseUser(req);
   if (!user.ok) return error("unauthorized", 401, { reason: user.reason });
 
+  const normalized = normalizeVerificationCreatePayload(body);
+  if (!normalized.socialAccount || !normalized.platform || !normalized.agreementAccepted) {
+    return error("missing_required_fields", 400, {
+      detail: "socialAccount, platform, and agreementAccepted are required.",
+    });
+  }
+
   const payload: Record<string, unknown> = {
-    ...body,
+    ...normalized,
+    userName: requiredString(body.userName) || user.email || "",
     userId: user.uid,
     email: user.email || body.email || null,
     status: "pending",

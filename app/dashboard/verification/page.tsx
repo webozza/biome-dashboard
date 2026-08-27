@@ -154,6 +154,177 @@ const NEUTRAL_FIELD_CLASS =
 const BMID_BADGE_CLASS =
   "inline-flex items-center gap-1.5 rounded-lg border border-[#3b82f6]/20 bg-[#3b82f6]/10 px-2.5 py-1 font-mono text-xs font-black text-[#3b82f6] shadow-none";
 
+type SubmittedVerificationAccount = {
+  platform: string;
+  displayName: string;
+  profileUrl: string | null;
+};
+
+type SubmittedVerificationAccountGroup = {
+  platform: string;
+  accounts: SubmittedVerificationAccount[];
+};
+
+function cleanOptionalText(value: unknown) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text || null;
+}
+
+function formatPlatformLabel(value: string) {
+  return PLATFORM_LABELS[value.toLowerCase()] || value;
+}
+
+function parseSubmittedAccountValue(value: string): {
+  displayName: string | null;
+  profileUrl: string | null;
+} {
+  const text = value.trim();
+  const match = text.match(/^(.*?)\s+\((https?:\/\/[^)]+)\)$/i);
+
+  if (!match) {
+    return {
+      displayName: cleanOptionalText(text),
+      profileUrl: null,
+    };
+  }
+
+  return {
+    displayName: cleanOptionalText(match[1]),
+    profileUrl: cleanOptionalText(match[2]),
+  };
+}
+
+function isBmidCancellationRequest(item: VerificationRequest) {
+  return (
+    item.platform.toLowerCase() === "bmid" ||
+    /bmid cancellation|cancellation request|requested bmid cancellation/i.test(
+      item.verificationReason || ""
+    )
+  );
+}
+
+function getSubmittedVerificationAccounts(
+  item: VerificationRequest | null | undefined
+): SubmittedVerificationAccount[] {
+  if (!item || isBmidCancellationRequest(item)) return [];
+
+  if (item.submittedAccounts?.length) {
+    return item.submittedAccounts.map((account) => ({
+      platform: formatPlatformLabel(account.platform),
+      displayName: account.displayName,
+      profileUrl: cleanOptionalText(account.profileUrl),
+    }));
+  }
+
+  const reason = item.verificationReason || "";
+  const marker = "Submitted using connected social account(s):";
+  const markerIndex = reason.indexOf(marker);
+
+  if (markerIndex >= 0) {
+    const summaryStart = markerIndex + marker.length;
+    const confirmationIndex = reason.indexOf(". User confirmed", summaryStart);
+    const summary = reason
+      .slice(summaryStart, confirmationIndex >= 0 ? confirmationIndex : undefined)
+      .trim();
+
+    const accounts = summary
+      .split(";")
+      .map((part) => {
+        const [rawPlatform, ...rawDisplayNameParts] = part.split(":");
+        const platform = cleanOptionalText(rawPlatform);
+        const parsedAccount = parseSubmittedAccountValue(rawDisplayNameParts.join(":"));
+        const displayName = parsedAccount.displayName;
+
+        if (!platform || !displayName) return null;
+
+        const normalizedPlatform = formatPlatformLabel(platform);
+        const isPrimary = normalizedPlatform.toLowerCase() === item.platform.toLowerCase();
+
+        return {
+          platform: normalizedPlatform,
+          displayName,
+          profileUrl:
+            parsedAccount.profileUrl ||
+            (isPrimary ? cleanOptionalText(item.profileUrl) : null),
+        };
+      })
+      .filter(Boolean) as SubmittedVerificationAccount[];
+
+    if (accounts.length > 0) return accounts;
+  }
+
+  return [
+    {
+      platform: formatPlatformLabel(item.platform),
+      displayName:
+        cleanOptionalText(item.displayName) ||
+        cleanOptionalText(item.socialAccount) ||
+        "Connected account",
+      profileUrl: cleanOptionalText(item.profileUrl),
+    },
+  ];
+}
+
+function groupSubmittedVerificationAccounts(
+  accounts: SubmittedVerificationAccount[]
+): SubmittedVerificationAccountGroup[] {
+  const groups = new Map<string, SubmittedVerificationAccount[]>();
+
+  for (const account of accounts) {
+    const current = groups.get(account.platform) || [];
+    current.push(account);
+    groups.set(account.platform, current);
+  }
+
+  return Array.from(groups.entries()).map(([platform, groupAccounts]) => ({
+    platform,
+    accounts: groupAccounts,
+  }));
+}
+
+function renderSubmittedPlatforms(item: VerificationRequest) {
+  const accounts = getSubmittedVerificationAccounts(item);
+
+  const groups =
+    accounts.length > 0
+      ? groupSubmittedVerificationAccounts(accounts)
+      : [{ platform: item.platform, accounts: [] }];
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {groups.map((group) => (
+        <span
+          key={group.platform}
+          className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] font-black uppercase tracking-wider text-secondary"
+        >
+          {group.platform}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function renderSubmittedSocialAccounts(item: VerificationRequest) {
+  const accounts = getSubmittedVerificationAccounts(item);
+
+  if (accounts.length <= 1) {
+    return <span className="text-secondary break-all">{item.socialAccount}</span>;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {groupSubmittedVerificationAccounts(accounts).map((group) => (
+        <div key={group.platform} className="text-xs leading-relaxed">
+          <span className="font-black text-secondary">{group.platform}: </span>
+          <span className="text-tertiary break-all">
+            {group.accounts.map((account) => account.displayName).join(", ")}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function matchesSearch(item: VerificationRequest, query: string) {
   if (!query) return true;
   const q = query.toLowerCase();
@@ -284,6 +455,11 @@ export default function VerificationPage() {
   });
 
   const selected = detailQuery.data || selectedFromList;
+  const selectedIsBmidCancellation = selected ? isBmidCancellationRequest(selected) : false;
+  const selectedConnectedAccountGroups = useMemo(
+    () => groupSubmittedVerificationAccounts(getSubmittedVerificationAccounts(selected)),
+    [selected]
+  );
 
   const patchMutation = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: PatchPayload }) => patchVerification(id, patch, apiToken!),
@@ -356,11 +532,15 @@ export default function VerificationPage() {
         </div>
       ),
     },
-    { key: "platform", label: "Platform" },
+    {
+      key: "platform",
+      label: "Platform",
+      render: (row: VerificationRequest) => renderSubmittedPlatforms(row),
+    },
     {
       key: "socialAccount",
       label: "Social Account",
-      render: (row: VerificationRequest) => <span className="text-secondary">{row.socialAccount}</span>,
+      render: (row: VerificationRequest) => renderSubmittedSocialAccounts(row),
     },
     {
       key: "bmidNumber",
@@ -478,7 +658,6 @@ export default function VerificationPage() {
       socialAccount: createForm.socialAccount.trim(),
       profileUrl: createForm.profileUrl.trim(),
       displayName: createForm.displayName.trim(),
-      verificationReason: createForm.verificationReason.trim(),
       screenshotUrl: createForm.screenshotUrl.trim(),
       contentCategory: createForm.contentCategory.trim(),
       country: createForm.country.trim(),
@@ -490,10 +669,6 @@ export default function VerificationPage() {
       !trimmed.email ||
       !trimmed.socialAccount ||
       createForm.platforms.length === 0 ||
-      !trimmed.profileUrl ||
-      !trimmed.verificationReason ||
-      !createForm.activeOneYear ||
-      !createForm.representsRealIdentity ||
       !createForm.agreementAccepted
     ) {
       return;
@@ -503,12 +678,12 @@ export default function VerificationPage() {
       userName: trimmed.userName,
       email: trimmed.email,
       socialAccount: trimmed.socialAccount,
-      profileUrl: trimmed.profileUrl,
+      profileUrl: trimmed.profileUrl || null,
       displayName: trimmed.displayName || null,
-      accountType: createForm.accountType,
-      verificationReason: trimmed.verificationReason,
-      activeOneYear: createForm.activeOneYear === "yes",
-      representsRealIdentity: createForm.representsRealIdentity === "yes",
+      accountType: null,
+      verificationReason: null,
+      activeOneYear: createForm.activeOneYear ? createForm.activeOneYear === "yes" : null,
+      representsRealIdentity: createForm.representsRealIdentity ? createForm.representsRealIdentity === "yes" : null,
       screenshotUrl: trimmed.screenshotUrl || null,
       agreementAccepted: createForm.agreementAccepted,
       followerCount: Number.isFinite(followerCountNumber) ? followerCountNumber : null,
@@ -637,7 +812,7 @@ export default function VerificationPage() {
         onClose={() => setSelectedId(null)}
         title="Verification Details"
         variant="modal"
-        panelClassName="max-w-2xl"
+        panelClassName="max-w-4xl"
       >
         {!selected ? (
           <div className="flex items-center justify-center py-16 text-muted">
@@ -663,7 +838,7 @@ export default function VerificationPage() {
                 <p className="text-sm">{selected.platform}</p>
               </div>
               <div>
-                <p className="text-xs text-tertiary mb-1">Social Account</p>
+                <p className="text-xs text-tertiary mb-1">Connected Social Account</p>
                 <p className="text-sm">{selected.socialAccount}</p>
               </div>
               <div>
@@ -693,109 +868,94 @@ export default function VerificationPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <BadgeCheck className="w-4 h-4 text-primary" />
-                <p className="text-xs font-semibold text-secondary uppercase tracking-wider">Submitted Proofs</p>
-              </div>
-
-              {selected.profileUrl ? (
-                <div>
-                  <p className="text-xs text-tertiary mb-1">Profile / Channel URL</p>
-                  <a
-                    href={selected.profileUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm text-primary underline-offset-2 hover:underline break-all"
-                  >
-                    {selected.profileUrl}
-                  </a>
+            {selectedIsBmidCancellation ? (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Undo2 className="w-4 h-4 text-amber-500" />
+                  <p className="text-xs font-semibold text-secondary uppercase tracking-wider">BMID Cancellation Request</p>
                 </div>
-              ) : null}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-tertiary mb-1">BMID</p>
+                    <p className="text-sm font-semibold">{selected.socialAccount || selected.bmidNumber || "Pending"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-tertiary mb-1">Requested By</p>
+                    <p className="text-sm">{selected.userName}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <BadgeCheck className="w-4 h-4 text-primary" />
+                  <p className="text-xs font-semibold text-secondary uppercase tracking-wider">Connected Social Accounts</p>
+                </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {selected.displayName ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {selectedConnectedAccountGroups.map((group) => (
+                    <div key={group.platform} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                      <p className="text-xs font-black uppercase tracking-wider text-primary">{group.platform}</p>
+                      <div className="mt-3 space-y-3">
+                        {group.accounts.map((account) => (
+                          <div key={`${group.platform}-${account.displayName}`} className="rounded-lg border border-white/10 bg-surface/60 p-3">
+                            <p className="text-xs text-tertiary mb-1">Display name</p>
+                            <p className="text-sm font-semibold text-main break-all">{account.displayName}</p>
+                            {account.profileUrl ? (
+                              <a
+                                href={account.profileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-2 block text-xs text-primary underline-offset-2 hover:underline break-all"
+                              >
+                                {account.profileUrl}
+                              </a>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-tertiary mb-1">Display Name</p>
-                    <p className="text-sm">{selected.displayName}</p>
-                  </div>
-                ) : null}
-                {selected.accountType ? (
-                  <div>
-                    <p className="text-xs text-tertiary mb-1">Account Type</p>
-                    <p className="text-sm capitalize">{selected.accountType}</p>
-                  </div>
-                ) : null}
-                {typeof selected.activeOneYear === "boolean" ? (
-                  <div>
-                    <p className="text-xs text-tertiary mb-1">Active ≥ 1 year?</p>
-                    <p className={`text-sm font-semibold ${selected.activeOneYear ? "text-primary" : "text-red-700 dark:text-red-300"}`}>
-                      {selected.activeOneYear ? "Yes" : "No"}
+                    <p className="text-xs text-tertiary mb-1">Active at least 1 year</p>
+                    <p className={`text-sm font-semibold ${
+                      selected.activeOneYear === false
+                        ? "text-red-700 dark:text-red-300"
+                        : "text-primary"
+                    }`}>
+                      {selected.activeOneYear === false ? "Not confirmed" : "Confirmed by user"}
                     </p>
                   </div>
-                ) : null}
-                {typeof selected.representsRealIdentity === "boolean" ? (
-                  <div>
-                    <p className="text-xs text-tertiary mb-1">Real person/identity?</p>
-                    <p className={`text-sm font-semibold ${selected.representsRealIdentity ? "text-primary" : "text-amber-700 dark:text-amber-300"}`}>
-                      {selected.representsRealIdentity ? "Yes" : "No (entertainment/AI)"}
-                    </p>
+                  <div className={`flex items-center gap-2 text-xs font-semibold ${
+                    selected.agreementAccepted ? "text-primary" : "text-amber-700 dark:text-amber-300"
+                  }`}>
+                    {selected.agreementAccepted ? (
+                      <CheckCircle className="w-3.5 h-3.5" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5" />
+                    )}
+                    Eligibility Confirmation: {selected.agreementAccepted ? "Accepted" : "Not accepted"}
                   </div>
-                ) : null}
-                {typeof selected.followerCount === "number" ? (
+                </div>
+
+                {selected.screenshotUrl ? (
                   <div>
-                    <p className="text-xs text-tertiary mb-1">Followers</p>
-                    <p className="text-sm">{selected.followerCount.toLocaleString()}</p>
-                  </div>
-                ) : null}
-                {selected.contentCategory ? (
-                  <div>
-                    <p className="text-xs text-tertiary mb-1">Content Category</p>
-                    <p className="text-sm">{selected.contentCategory}</p>
-                  </div>
-                ) : null}
-                {selected.country ? (
-                  <div>
-                    <p className="text-xs text-tertiary mb-1">Country</p>
-                    <p className="text-sm">{selected.country}</p>
-                  </div>
-                ) : null}
-                {selected.contactEmail ? (
-                  <div>
-                    <p className="text-xs text-tertiary mb-1">Contact Email</p>
-                    <p className="text-sm break-all">{selected.contactEmail}</p>
+                    <p className="text-xs text-tertiary mb-1">Screenshot Proof</p>
+                    <a
+                      href={selected.screenshotUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-primary underline-offset-2 hover:underline break-all"
+                    >
+                      {selected.screenshotUrl}
+                    </a>
                   </div>
                 ) : null}
               </div>
-
-              {selected.verificationReason ? (
-                <div>
-                  <p className="text-xs text-tertiary mb-1">Reason for Verification</p>
-                  <p className="text-sm whitespace-pre-wrap">{selected.verificationReason}</p>
-                </div>
-              ) : null}
-
-              {selected.screenshotUrl ? (
-                <div>
-                  <p className="text-xs text-tertiary mb-1">Screenshot Proof</p>
-                  <a
-                    href={selected.screenshotUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm text-primary underline-offset-2 hover:underline break-all"
-                  >
-                    {selected.screenshotUrl}
-                  </a>
-                </div>
-              ) : null}
-
-              {selected.agreementAccepted ? (
-                <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  User confirmed this is their real account.
-                </div>
-              ) : null}
-            </div>
+            )}
 
             <div className="space-y-2">
               <label className="block text-xs text-tertiary">Admin Note</label>
@@ -963,7 +1123,7 @@ export default function VerificationPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs text-tertiary">Profile / Channel URL *</label>
+            <label className="block text-xs text-tertiary">Profile / Channel URL</label>
             <input
               value={createForm.profileUrl}
               onChange={(e) => setCreateForm((f) => ({ ...f, profileUrl: e.target.value }))}
@@ -971,53 +1131,23 @@ export default function VerificationPage() {
               className={NEUTRAL_FIELD_CLASS}
               placeholder="https://instagram.com/handle"
             />
-            <p className="text-[11px] text-muted">Main proof — admin will open this link to verify the account.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs text-tertiary">Display Name</label>
-              <input
-                value={createForm.displayName}
-                onChange={(e) => setCreateForm((f) => ({ ...f, displayName: e.target.value }))}
-                disabled={createMutation.isPending}
-                className={NEUTRAL_FIELD_CLASS}
-                placeholder="Public name on the profile"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="block text-xs text-tertiary">Account Type</label>
-              <select
-                value={createForm.accountType}
-                onChange={(e) =>
-                  setCreateForm((f) => ({ ...f, accountType: e.target.value as AccountType }))
-                }
-                disabled={createMutation.isPending}
-                className={NEUTRAL_FIELD_CLASS}
-              >
-                <option value="personal">Personal</option>
-                <option value="creator">Creator</option>
-                <option value="brand">Brand</option>
-                <option value="entertainment">Entertainment</option>
-              </select>
-            </div>
+            <p className="text-[11px] text-muted">Optional. Connected app requests may leave this blank.</p>
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs text-tertiary">Why are you requesting verification? *</label>
-            <textarea
-              value={createForm.verificationReason}
-              onChange={(e) => setCreateForm((f) => ({ ...f, verificationReason: e.target.value }))}
+            <label className="block text-xs text-tertiary">Display Name</label>
+            <input
+              value={createForm.displayName}
+              onChange={(e) => setCreateForm((f) => ({ ...f, displayName: e.target.value }))}
               disabled={createMutation.isPending}
-              rows={3}
               className={NEUTRAL_FIELD_CLASS}
-              placeholder="Tell us why this account should be verified"
+              placeholder="Public name on the profile"
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-              <label className="block text-xs text-tertiary">Active for at least 1 year? *</label>
+              <label className="block text-xs text-tertiary">Active for at least 1 year?</label>
               <div className="flex gap-2">
                 {(["yes", "no"] as const).map((v) => (
                   <button
@@ -1037,7 +1167,7 @@ export default function VerificationPage() {
               </div>
             </div>
             <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-              <label className="block text-xs text-tertiary">Represents a real person/identity? *</label>
+              <label className="block text-xs text-tertiary">Represents a real person/identity?</label>
               <div className="flex gap-2">
                 {(["yes", "no"] as const).map((v) => (
                   <button
@@ -1157,10 +1287,7 @@ export default function VerificationPage() {
                 !createForm.userName.trim() ||
                 !createForm.email.trim() ||
                 !createForm.socialAccount.trim() ||
-                !createForm.profileUrl.trim() ||
-                !createForm.verificationReason.trim() ||
-                !createForm.activeOneYear ||
-                !createForm.representsRealIdentity ||
+                createForm.platforms.length === 0 ||
                 !createForm.agreementAccepted
               }
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl text-sm hover:bg-primary/15 transition-colors disabled:opacity-60"

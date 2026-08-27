@@ -40,6 +40,11 @@ export interface VerificationRequest {
   country?: string | null;
   contactEmail?: string | null;
   bmidNumber?: string | null;
+  submittedAccounts?: Array<{
+    platform: string;
+    displayName: string;
+    profileUrl?: string | null;
+  }> | null;
 }
 
 export interface ContentRequest {

@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { buildGetOne } from "@/lib/server/resource";
 import { guard } from "@/lib/server/guard";
 import { deleteDoc, getDoc, updateDoc } from "@/lib/server/firestore";
 import { error, json } from "@/lib/server/response";
@@ -29,7 +28,108 @@ type VerificationDoc = {
   rejectionReason?: string | null;
   bmidNumber?: string | null;
   previousBmidNumber?: string | null;
+  submittedAccounts?: SubmittedAccount[] | null;
 };
+
+type SubmittedAccount = {
+  platform: string;
+  displayName: string;
+  profileUrl: string | null;
+};
+
+function cleanText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function connectedAccount(
+  platform: string,
+  displayName: unknown,
+  fallbackName: string,
+  profileUrl: unknown
+): SubmittedAccount {
+  return {
+    platform,
+    displayName: cleanText(displayName) || fallbackName,
+    profileUrl: cleanText(profileUrl),
+  };
+}
+
+function getConnectedUserAccounts(userData: Record<string, unknown> | undefined): SubmittedAccount[] {
+  const socialConnections =
+    userData?.socialConnections && typeof userData.socialConnections === "object"
+      ? (userData.socialConnections as Record<string, Record<string, unknown> | undefined>)
+      : {};
+  const socials =
+    userData?.socials && typeof userData.socials === "object"
+      ? (userData.socials as Record<string, unknown>)
+      : {};
+  const accounts: SubmittedAccount[] = [];
+
+  if (socialConnections.facebook?.status === "connected") {
+    accounts.push(
+      connectedAccount(
+        "Facebook",
+        socialConnections.facebook.name || socialConnections.facebook.facebookUserId,
+        "Connected Facebook account",
+        socialConnections.facebook.profileUrl || socials.facebook
+      )
+    );
+  }
+
+  if (socialConnections.instagram?.status === "connected") {
+    accounts.push(
+      connectedAccount(
+        "Instagram",
+        socialConnections.instagram.username || socialConnections.instagram.instagramUserId,
+        "Connected Instagram account",
+        socialConnections.instagram.profileUrl || socials.instagram
+      )
+    );
+  }
+
+  if (socialConnections.tiktok?.status === "connected") {
+    accounts.push(
+      connectedAccount(
+        "TikTok",
+        socialConnections.tiktok.displayName ||
+          socialConnections.tiktok.username ||
+          socialConnections.tiktok.openId,
+        "Connected TikTok account",
+        socialConnections.tiktok.profileUrl || socials.tiktok
+      )
+    );
+  }
+
+  if (socialConnections.youtube?.status === "connected") {
+    accounts.push(
+      connectedAccount(
+        "YouTube",
+        socialConnections.youtube.handle ||
+          socialConnections.youtube.title ||
+          socialConnections.youtube.channelId,
+        "Connected YouTube account",
+        socialConnections.youtube.profileUrl || socials.youtube
+      )
+    );
+  }
+
+  return accounts;
+}
+
+async function enrichVerificationRequest(doc: VerificationDoc): Promise<VerificationDoc> {
+  if (!doc.userId) return doc;
+
+  const userSnap = await db().collection("users").doc(doc.userId).get();
+  if (!userSnap.exists) return doc;
+
+  const submittedAccounts = getConnectedUserAccounts(userSnap.data() as Record<string, unknown>);
+  if (submittedAccounts.length === 0) return doc;
+
+  return {
+    ...doc,
+    submittedAccounts,
+  };
+}
 
 async function ensureApprovedUserState(userId: string): Promise<string | null> {
   await ensureReservedBmidAssignmentsSynced();
@@ -121,7 +221,19 @@ async function revokeApprovedUserState(userId: string) {
   return preservedBmidNumber;
 }
 
-export const GET = buildGetOne("verificationRequests");
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const g = guard(req);
+  if (g) return g;
+
+  const { id } = await ctx.params;
+  try {
+    const existing = await getDoc<VerificationDoc>("verificationRequests", id);
+    if (!existing) return error("not_found", 404);
+    return json(await enrichVerificationRequest(existing));
+  } catch (e) {
+    return error("get_failed", 500, { detail: String((e as Error).message) });
+  }
+}
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const g = guard(req);

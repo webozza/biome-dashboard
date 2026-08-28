@@ -15,10 +15,11 @@ export function GET() {
         {
           appID,
           appIDs: [appID],
-          paths: ["/p/*", "/r/*", "/oauthredirect"],
+          paths: ["/p/*", "/r/*", "/bmid/*", "/oauthredirect"],
           components: [
             { "/": "/p/*", comment: "Post share links" },
             { "/": "/r/*", comment: "Reel share links" },
+            { "/": "/bmid/*", comment: "Public BMID profile links" },
             { "/": "/oauthredirect", comment: "TikTok OAuth redirect" },
           ],
         },

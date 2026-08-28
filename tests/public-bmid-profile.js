@@ -30,19 +30,43 @@ const checks = [
       !/token:\s*user\./.test(resolver),
   },
   {
-    name: "portfolio only loads highlighted or BMID-visible work",
+    name: "portfolio is creator-selected, capped at six, and includes posts and vibes",
     pass:
       /where\("isHighlighted", "==", true\)/.test(resolver) &&
-      /status === "approved" \|\| votingStatus === "open" \|\| votingStatus === "finalized"/.test(resolver),
+      /loadHighlightedVibes/.test(resolver) &&
+      /\[\.\.\.highlightedPosts, \.\.\.highlightedVibes\]/.test(resolver) &&
+      /\.slice\(0, 6\)/.test(resolver),
   },
   {
-    name: "browser page includes verified identity and branded coming-soon marketplace",
+    name: "BMID Content and BMID Box remain separate from the creator portfolio",
+    pass:
+      /bmidContent: PublicPortfolioItem\[\]/.test(resolver) &&
+      /bmidBox: PublicPortfolioItem\[\]/.test(resolver) &&
+      /profile\.bmidContent\.length/.test(renderer) &&
+      /profile\.bmidBox\.length/.test(renderer),
+  },
+  {
+    name: "browser page includes verified identity and a branded coming-soon creator CTA",
     pass:
       /BMID Verified/.test(renderer) &&
       /Creator portfolio/.test(renderer) &&
       /Coming soon/.test(renderer) &&
-      /creator &amp; brand marketplace/.test(renderer) &&
-      /Marketplace access is on the way/.test(renderer),
+      /Become a Creator/.test(renderer) &&
+      /creator-modal/.test(renderer),
+  },
+  {
+    name: "selected work is hidden at zero and store icons are self-contained",
+    pass:
+      /profile\.portfolio\.length \? `<section/.test(renderer) &&
+      /APPLE_ICON/.test(renderer) &&
+      /PLAY_ICON/.test(renderer),
+  },
+  {
+    name: "unverified profiles receive professional verification guidance",
+    pass:
+      /verification-inactive/.test(resolver) &&
+      /required social accounts are connected/.test(renderer) &&
+      /resolvePublicBmidProfileResult/.test(route),
   },
   {
     name: "public route returns safe caching, CSP, and noindex for unavailable profiles",

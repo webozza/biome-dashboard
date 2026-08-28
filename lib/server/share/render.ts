@@ -77,7 +77,7 @@ export function renderOgPage(args: RenderArgs): string {
   const iosAppId = (iosStore.match(/\/id(\d+)/) || [])[1] || "";
   const iosBadge = "https://beepbeep.sg/apple-store-button.svg";
   const androidBadge = "https://beepbeep.sg/google-play-store-button.svg";
-  const logoUrl = "/images/logo.png";
+  const logoUrl = "/icon.png";
 
   const resolvedUser = userName || "Biome Aura User";
   const ogTitle = `${resolvedUser} on ${APP_NAME}`;

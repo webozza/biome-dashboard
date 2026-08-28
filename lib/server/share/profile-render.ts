@@ -1,4 +1,5 @@
 import type {
+  PublicBmidUnavailableReason,
   PublicPortfolioItem,
   PublicProfileSocial,
   ResolvedPublicBmidProfile,
@@ -7,6 +8,8 @@ import { env, escapeHtml, makeAbsoluteUrl } from "./utils";
 
 const ANDROID_STORE = "https://play.google.com/store/apps/details?id=com.webozza.projectv";
 const IOS_STORE = "https://apps.apple.com/us/app/biome-aura/id6751843622";
+const APPLE_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.5c1.21.07 2.05.66 2.76.71 1.07-.22 2.09-.85 3.23-.77 1.37.11 2.4.65 3.08 1.62-2.82 1.69-2.15 5.41.44 6.45-.52 1.36-1.2 2.71-2.19 3.71.01.03.35.68.68 1.06ZM12.03 7.25c-.15-2.02 1.5-3.69 3.37-3.85.26 2.34-2.12 4.08-3.37 3.85Z"/></svg>`;
+const PLAY_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#34a853" d="M3 2.5v19l10.7-9.5L3 2.5Z"/><path fill="#fbbc04" d="m13.7 12 3.2-2.8 3.8 2.2c.8.5.8 1.2 0 1.7l-3.8 2.2-3.2-3.3Z"/><path fill="#4285f4" d="M3 2.5 16.9 9.2 13.7 12 3 2.5Z"/><path fill="#ea4335" d="m3 21.5 10.7-9.5 3.2 3.3L3 21.5Z"/></svg>`;
 
 function formatMemberSince(value: string | null): string {
   if (!value) return "";
@@ -175,7 +178,8 @@ export function renderPublicBmidProfile(args: {
     .work-copy h3{font-size:20px;line-height:1.25;letter-spacing:-.025em;margin:0}
     .work-copy p{font-size:13px;line-height:1.6;color:var(--soft);margin:10px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
     .work-view{font-size:12px;font-weight:850;color:var(--green-dark);margin-top:auto;padding-top:18px}
-    .empty-work{border:1px dashed rgba(65,102,55,.24);border-radius:24px;background:rgba(255,255,255,.45);padding:38px;text-align:center;color:var(--soft)}
+    .verification-section{padding-top:72px}
+    .verification-section .kicker{display:inline-flex;align-items:center;gap:8px}.verification-section .kicker::before{content:"✓";width:22px;height:22px;display:grid;place-items:center;border-radius:8px;background:var(--mint);font-size:11px}
     .coming{margin-top:92px;border-radius:38px;background:#172c1b;color:white;overflow:hidden;position:relative;box-shadow:var(--shadow)}
     .coming::before{content:"";position:absolute;inset:-30%;background:radial-gradient(circle at 76% 22%,rgba(151,208,112,.28),transparent 28%),radial-gradient(circle at 5% 95%,rgba(118,172,81,.22),transparent 25%);pointer-events:none}
     .coming-grid{position:relative;display:grid;grid-template-columns:1.1fr .9fr;gap:60px;padding:clamp(42px,7vw,78px)}
@@ -187,16 +191,21 @@ export function renderPublicBmidProfile(args: {
     .benefit{display:flex;align-items:center;gap:13px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.055);border-radius:16px;padding:14px 16px;color:rgba(255,255,255,.86);font-size:13px;font-weight:700}
     .benefit-mark{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;background:rgba(183,229,148,.16);color:#c9f0a9;font-weight:900;flex:0 0 auto}
     .soon-action{margin-top:28px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-    .disabled-cta{display:inline-flex;align-items:center;gap:9px;padding:14px 18px;border-radius:14px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.13);font-size:13px;font-weight:850;color:rgba(255,255,255,.72)}
+    .creator-cta{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:11px;padding:15px 20px;border-radius:15px;background:#c9f0a9;border:1px solid rgba(255,255,255,.14);box-shadow:0 12px 32px rgba(0,0,0,.18);font:inherit;font-size:14px;font-weight:900;color:#20391f;transition:transform .18s ease,box-shadow .18s ease}
+    .creator-cta:hover{transform:translateY(-2px);box-shadow:0 18px 38px rgba(0,0,0,.24)}
     .store-block{padding:42px clamp(28px,6vw,68px);display:flex;align-items:center;justify-content:space-between;gap:28px;background:white;border:1px solid var(--line);border-radius:28px;margin-top:20px}
     .store-copy h3{font-size:24px;letter-spacing:-.035em;margin:0 0 6px}.store-copy p{margin:0;color:var(--soft);font-size:14px}
     .stores{display:flex;gap:10px;flex-wrap:wrap}
     .store{display:flex;align-items:center;gap:10px;padding:12px 15px;border-radius:14px;background:var(--ink);color:#fff;text-decoration:none;font-weight:800;font-size:13px;white-space:nowrap}
+    .store-icon{width:25px;height:25px;display:grid;place-items:center;flex:0 0 auto}.store-icon svg{width:100%;height:100%;display:block}
     .store small{display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.62);font-weight:650}.store span{line-height:1.15}
+    .modal-backdrop{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:22px;background:rgba(10,22,12,.62);backdrop-filter:blur(13px);opacity:0;visibility:hidden;transition:opacity .2s ease,visibility .2s ease}
+    .modal-backdrop.open{opacity:1;visibility:visible}.modal-card{position:relative;width:min(450px,100%);padding:42px;border-radius:30px;background:linear-gradient(145deg,#fff,#f2f8ee);color:var(--ink);box-shadow:0 34px 100px rgba(0,0,0,.32);transform:translateY(12px) scale(.98);transition:transform .2s ease}.modal-backdrop.open .modal-card{transform:none}
+    .modal-mark{width:58px;height:58px;border-radius:19px;display:grid;place-items:center;background:var(--green-deep);color:#c9f0a9;font-size:25px;font-weight:900}.modal-card h2{font-size:38px;margin:24px 0 12px}.modal-card p{margin:0;color:var(--soft);line-height:1.7}.modal-close{position:absolute;top:18px;right:18px;width:38px;height:38px;border:0;border-radius:50%;background:#e9f2e4;color:#29482a;font-size:22px;cursor:pointer}
     footer{padding:38px 0 44px;color:#778078;font-size:12px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
     @media(max-width:880px){.hero-grid{grid-template-columns:1fr;padding-top:50px}.portrait-wrap{grid-row:1;min-height:310px}.portrait{width:250px}.portrait-ring{width:310px}.work-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.coming-grid{grid-template-columns:1fr}.section-head{align-items:flex-start;flex-direction:column}.store-block{align-items:flex-start;flex-direction:column}}
     @media(max-width:580px){.shell{width:min(100% - 24px,1180px)}.nav{height:72px}.nav-label{display:none}.open-app{padding:10px 12px}.hero{border-radius:26px}.hero-grid{padding:36px 22px 42px;gap:24px}.portrait-wrap{min-height:245px}.portrait{width:205px;border-radius:40px}.portrait-ring{width:245px}.portrait-badge{right:2%;bottom:3%}h1{font-size:46px}.bio{font-size:15px}.section{padding-top:62px}.work-grid{grid-template-columns:1fr}.work-media{height:255px}.coming{border-radius:26px;margin-top:68px}.coming-grid{padding:38px 24px;gap:35px}.store-block{padding:30px 24px}.stores{width:100%}.store{flex:1;justify-content:center}.hero::after{font-size:380px;right:-10px}}
-    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.social-link,.work-card,.work-media img{transition:none}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.social-link,.work-card,.work-media img,.creator-cta,.modal-backdrop,.modal-card{transition:none}}
   </style>
 </head>
 <body>
@@ -242,18 +251,28 @@ export function renderPublicBmidProfile(args: {
         <div class="social-grid">${profile.socials.map(socialHtml).join("")}</div>
       </section>` : ""}
 
-      <section class="section" aria-labelledby="work-title">
+      ${profile.portfolio.length ? `<section class="section" aria-labelledby="work-title">
         <div class="section-head"><div><div class="kicker">Creator portfolio</div><h2 id="work-title">Selected work</h2></div><p class="section-note">Featured and BMID-approved work presented as part of this creator's public profile.</p></div>
-        ${profile.portfolio.length ? `<div class="work-grid">${profile.portfolio.map((item) => portfolioHtml(item, pageUrl)).join("")}</div>` : `<div class="empty-work">This creator is preparing their public portfolio. Check back soon.</div>`}
-      </section>
+        <div class="work-grid">${profile.portfolio.map((item) => portfolioHtml(item, pageUrl)).join("")}</div>
+      </section>` : ""}
+
+      ${profile.bmidContent.length ? `<section class="section verification-section" aria-labelledby="content-title">
+        <div class="section-head"><div><div class="kicker">BMID verified ecosystem</div><h2 id="content-title">BMID Content</h2></div><p class="section-note">Content reviewed through Biome Aura's creator verification ecosystem, shown separately from the creator-selected portfolio.</p></div>
+        <div class="work-grid">${profile.bmidContent.map((item) => portfolioHtml(item, pageUrl)).join("")}</div>
+      </section>` : ""}
+
+      ${profile.bmidBox.length ? `<section class="section verification-section" aria-labelledby="box-title">
+        <div class="section-head"><div><div class="kicker">Connected verification</div><h2 id="box-title">BMID Box</h2></div><p class="section-note">Approved work connected from outside Biome Aura while retaining its own verification context.</p></div>
+        <div class="work-grid">${profile.bmidBox.map((item) => portfolioHtml(item, pageUrl)).join("")}</div>
+      </section>` : ""}
 
       <section class="coming" aria-labelledby="coming-title">
         <div class="coming-grid">
           <div>
             <span class="soon">Coming soon</span>
-            <h2 id="coming-title">The Biome creator &amp; brand marketplace</h2>
-            <p class="coming-copy">We're building a trusted space where verified creators and brands can discover each other, build credible partnerships, and grow with confidence.</p>
-            <div class="soon-action"><span class="disabled-cta" aria-disabled="true">Marketplace access is on the way <span aria-hidden="true">→</span></span></div>
+            <h2 id="coming-title">Turn your creator identity into opportunity.</h2>
+            <p class="coming-copy">The Biome creator and brand marketplace is taking shape—a trusted space for credible partnerships, discovery, and future campaigns.</p>
+            <div class="soon-action"><button class="creator-cta" id="creator-cta" type="button">Become a Creator <span aria-hidden="true">→</span></button></div>
           </div>
           <div class="benefits" aria-label="Planned creator marketplace benefits">
             <div class="benefit"><span class="benefit-mark">✓</span>One trusted creator identity</div>
@@ -267,19 +286,26 @@ export function renderPublicBmidProfile(args: {
       <section class="store-block" aria-label="Download Biome Aura">
         <div class="store-copy"><h3>Biome Aura is available now</h3><p>Explore the community and manage your BMID identity in the app.</p></div>
         <div class="stores">
-          <a class="store" href="${escapeHtml(IOS_STORE)}" target="_blank" rel="noopener"><span aria-hidden="true">●</span><span><small>Download on the</small>App Store</span></a>
-          <a class="store" href="${escapeHtml(ANDROID_STORE)}" target="_blank" rel="noopener"><span aria-hidden="true">▶</span><span><small>Get it on</small>Google Play</span></a>
+          <a class="store" href="${escapeHtml(IOS_STORE)}" target="_blank" rel="noopener"><span class="store-icon">${APPLE_ICON}</span><span><small>Download on the</small>App Store</span></a>
+          <a class="store" href="${escapeHtml(ANDROID_STORE)}" target="_blank" rel="noopener"><span class="store-icon">${PLAY_ICON}</span><span><small>Get it on</small>Google Play</span></a>
         </div>
       </section>
     </main>
 
     <footer><span>© ${new Date().getFullYear()} ${escapeHtml(appName)}. Trusted creator identity.</span><span>${safeBmid} · BMID Verified</span></footer>
   </div>
+  <div class="modal-backdrop" id="creator-modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="creator-modal-title">
+      <button class="modal-close" id="creator-modal-close" type="button" aria-label="Close">×</button>
+      <div class="modal-mark" aria-hidden="true">B</div>
+      <h2 id="creator-modal-title">Coming soon</h2>
+      <p>Creator onboarding and marketplace access are not open just yet. Biome Aura is building the experience carefully, and this profile will be ready when applications launch.</p>
+    </div>
+  </div>
   <script>
     (function(){
       var button=document.getElementById('open-app');
-      if(!button)return;
-      button.addEventListener('click',function(event){
+      if(button)button.addEventListener('click',function(event){
         var ua=navigator.userAgent||'';
         if(!/Android|iPhone|iPad|iPod/i.test(ua))return;
         event.preventDefault();
@@ -289,12 +315,25 @@ export function renderPublicBmidProfile(args: {
         window.location.href=${JSON.stringify(deepLink)};
         setTimeout(function(){if(!hidden)window.location.href=/iPhone|iPad|iPod/i.test(ua)?${JSON.stringify(IOS_STORE)}:${JSON.stringify(ANDROID_STORE)}},1400);
       });
+      var creatorButton=document.getElementById('creator-cta');
+      var modal=document.getElementById('creator-modal');
+      var closeButton=document.getElementById('creator-modal-close');
+      function setModal(open){if(!modal)return;modal.classList.toggle('open',open);modal.setAttribute('aria-hidden',open?'false':'true');if(open&&closeButton)closeButton.focus()}
+      if(creatorButton)creatorButton.addEventListener('click',function(){setModal(true)});
+      if(closeButton)closeButton.addEventListener('click',function(){setModal(false);if(creatorButton)creatorButton.focus()});
+      if(modal)modal.addEventListener('click',function(event){if(event.target===modal)setModal(false)});
+      document.addEventListener('keydown',function(event){if(event.key==='Escape')setModal(false)});
     })();
   </script>
 </body>
 </html>`;
 }
 
-export function renderUnavailableBmidProfile(): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="robots" content="noindex"/><meta name="theme-color" content="#76ac51"/><title>Profile unavailable | Biome Aura</title><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at top,#e4f1da,#f8faf5 55%);font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172018}.card{width:min(520px,100%);background:rgba(255,255,255,.88);border:1px solid rgba(50,88,43,.13);border-radius:30px;padding:46px;text-align:center;box-shadow:0 28px 80px rgba(38,67,32,.14)}img{width:66px;height:66px;border-radius:20px}.label{display:inline-block;margin-top:24px;padding:7px 11px;border-radius:999px;background:#edf6e8;color:#4f7c3f;font-size:11px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}h1{font-size:38px;letter-spacing:-.05em;margin:17px 0 10px}p{color:#687269;line-height:1.65;margin:0}a{display:inline-flex;margin-top:26px;padding:13px 17px;border-radius:14px;background:#315e2e;color:white;text-decoration:none;font-size:13px;font-weight:800}</style></head><body><main class="card"><img src="/icon.png" alt=""/><br/><span class="label">Biome Aura</span><h1>Profile unavailable</h1><p>This BMID profile may not exist, may no longer be active, or is not available publicly.</p><a href="https://www.biome-aura.com">Visit Biome Aura</a></main></body></html>`;
+export function renderUnavailableBmidProfile(reason: PublicBmidUnavailableReason): string {
+  const verificationInactive = reason === "verification-inactive";
+  const title = verificationInactive ? "Verification not active" : "Profile unavailable";
+  const copy = verificationInactive
+    ? "This creator's public BMID profile is not active yet. Once the required social accounts are connected and verification is complete, their verified profile can be published here."
+    : "We couldn't find an active public BMID profile at this address. It may have moved, been deactivated, or is no longer publicly available.";
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="robots" content="noindex"/><meta name="theme-color" content="#76ac51"/><title>${escapeHtml(title)} | Biome Aura</title><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at top,#e4f1da,#f8faf5 55%);font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172018}.card{width:min(550px,100%);background:rgba(255,255,255,.9);border:1px solid rgba(50,88,43,.13);border-radius:30px;padding:46px;text-align:center;box-shadow:0 28px 80px rgba(38,67,32,.14)}img{width:66px;height:66px;border-radius:20px}.label{display:inline-block;margin-top:24px;padding:7px 11px;border-radius:999px;background:#edf6e8;color:#4f7c3f;font-size:11px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}h1{font-size:38px;letter-spacing:-.05em;margin:17px 0 10px}p{color:#687269;line-height:1.7;margin:0}a{display:inline-flex;margin-top:26px;padding:13px 17px;border-radius:14px;background:#315e2e;color:white;text-decoration:none;font-size:13px;font-weight:800}</style></head><body><main class="card"><img src="/icon.png" alt=""/><br/><span class="label">Biome Aura · BMID</span><h1>${escapeHtml(title)}</h1><p>${escapeHtml(copy)}</p><a href="https://www.biome-aura.com">Explore Biome Aura</a></main></body></html>`;
 }

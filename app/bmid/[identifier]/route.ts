@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { resolvePublicBmidProfile } from "@/lib/server/share/profile";
+import { resolvePublicBmidProfileResult } from "@/lib/server/share/profile";
 import {
   renderPublicBmidProfile,
   renderUnavailableBmidProfile,
@@ -14,9 +14,9 @@ export async function GET(
   ctx: { params: Promise<{ identifier: string }> }
 ) {
   const { identifier } = await ctx.params;
-  const profile = await resolvePublicBmidProfile(identifier);
+  const { profile, unavailableReason } = await resolvePublicBmidProfileResult(identifier);
   if (!profile) {
-    return new Response(renderUnavailableBmidProfile(), {
+    return new Response(renderUnavailableBmidProfile(unavailableReason ?? "not-found"), {
       status: 404,
       headers: {
         "Content-Type": "text/html; charset=utf-8",

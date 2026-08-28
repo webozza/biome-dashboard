@@ -18,7 +18,7 @@ export interface PublicProfileSocial {
 
 export interface PublicPortfolioItem {
   id: string;
-  kind: "post" | "content" | "box";
+  kind: "post" | "vibe" | "content" | "box";
   eyebrow: string;
   title: string;
   description: string;
@@ -38,6 +38,18 @@ export interface ResolvedPublicBmidProfile {
   bmidVerifiedAt: string | null;
   socials: PublicProfileSocial[];
   portfolio: PublicPortfolioItem[];
+  bmidContent: PublicPortfolioItem[];
+  bmidBox: PublicPortfolioItem[];
+}
+
+export type PublicBmidUnavailableReason =
+  | "not-found"
+  | "verification-inactive"
+  | "profile-inactive";
+
+export interface PublicBmidProfileResolution {
+  profile: ResolvedPublicBmidProfile | null;
+  unavailableReason: PublicBmidUnavailableReason | null;
 }
 
 const SOCIALS: Array<{
@@ -214,9 +226,36 @@ async function loadHighlightedPosts(uid: string): Promise<PublicPortfolioItem[]>
         description,
         imageUrl,
         href: `/p/${encodeURIComponent(uid)}/${encodeURIComponent(doc.id)}`,
-        createdAt: portfolioDate(data.createdAt),
+        createdAt: portfolioDate(data.highlightedAt || data.createdAt),
       }];
     });
+}
+
+async function loadHighlightedVibes(uid: string): Promise<PublicPortfolioItem[]> {
+  const snap = await db()
+    .collection("users")
+    .doc(uid)
+    .collection("reels")
+    .where("isHighlighted", "==", true)
+    .limit(12)
+    .get();
+
+  return snap.docs.flatMap((doc): PublicPortfolioItem[] => {
+    const data = doc.data() as AnyRecord;
+    if (data.public === false) return [];
+    const imageUrl = safeHttpUrl(pickVideoThumbnail(data) || pickFirstImage(data));
+    const description = cleanText(data.caption || data.description, 280);
+    return [{
+      id: `vibe-${doc.id}`,
+      kind: "vibe" as const,
+      eyebrow: "Featured vibe",
+      title: description ? description.slice(0, 90) : "Featured creator vibe",
+      description,
+      imageUrl,
+      href: `/r/${encodeURIComponent(uid)}/${encodeURIComponent(doc.id)}`,
+      createdAt: portfolioDate(data.highlightedAt || data.createdAt),
+    }];
+  });
 }
 
 function isVisibleContent(data: AnyRecord): boolean {
@@ -318,21 +357,41 @@ async function findUserByBmid(identifier: string) {
 export async function resolvePublicBmidProfile(
   rawIdentifier: string
 ): Promise<ResolvedPublicBmidProfile | null> {
+  const result = await resolvePublicBmidProfileResult(rawIdentifier);
+  return result.profile;
+}
+
+export async function resolvePublicBmidProfileResult(
+  rawIdentifier: string
+): Promise<PublicBmidProfileResolution> {
   const identifier = normalizeBmidIdentifier(rawIdentifier);
-  if (!identifier) return null;
+  if (!identifier) return { profile: null, unavailableReason: "not-found" };
 
   const userDoc = await findUserByBmid(identifier);
-  if (!userDoc) return null;
+  if (!userDoc) return { profile: null, unavailableReason: "not-found" };
   const user = userDoc.data() as AnyRecord;
-  if (!isPublicBmidUser(user)) return null;
+  if (!isPublicBmidUser(user)) {
+    const inactive = user.disabled === true || user.isDeleted === true || user.isDeactivated === true;
+    return {
+      profile: null,
+      unavailableReason: inactive ? "profile-inactive" : "verification-inactive",
+    };
+  }
 
   const portfolioGroups = await Promise.all([
     loadHighlightedPosts(userDoc.id),
+    loadHighlightedVibes(userDoc.id),
     loadApprovedContent(userDoc.id),
     loadApprovedBox(userDoc.id),
   ]);
-  const portfolio = portfolioGroups
-    .flat()
+  const [highlightedPosts, highlightedVibes, approvedContent, approvedBox] = portfolioGroups;
+  const portfolio = [...highlightedPosts, ...highlightedVibes]
+    .sort((a, b) => portfolioSortValue(b) - portfolioSortValue(a))
+    .slice(0, 6);
+  const bmidContent = approvedContent
+    .sort((a, b) => portfolioSortValue(b) - portfolioSortValue(a))
+    .slice(0, 6);
+  const bmidBox = approvedBox
     .sort((a, b) => portfolioSortValue(b) - portfolioSortValue(a))
     .slice(0, 6);
 
@@ -341,16 +400,21 @@ export async function resolvePublicBmidProfile(
     : [];
 
   return {
-    uid: userDoc.id,
-    displayName:
-      cleanText(user.displayName || user.name || user.username, 100) || "Biome Creator",
-    username: cleanText(user.username, 100).replace(/^@+/, ""),
-    photoUrl: safeHttpUrl(user.photoURL),
-    bio: cleanText(user.bio, 600),
-    tags,
-    bmidNumber: normalizeBmidIdentifier(user.bmidNumber),
-    bmidVerifiedAt: isoTimestamp(user.bmidVerifiedAt),
-    socials: publicSocials(user),
-    portfolio,
+    profile: {
+      uid: userDoc.id,
+      displayName:
+        cleanText(user.displayName || user.name || user.username, 100) || "Biome Creator",
+      username: cleanText(user.username, 100).replace(/^@+/, ""),
+      photoUrl: safeHttpUrl(user.photoURL),
+      bio: cleanText(user.bio, 600),
+      tags,
+      bmidNumber: normalizeBmidIdentifier(user.bmidNumber),
+      bmidVerifiedAt: isoTimestamp(user.bmidVerifiedAt),
+      socials: publicSocials(user),
+      portfolio,
+      bmidContent,
+      bmidBox,
+    },
+    unavailableReason: null,
   };
 }

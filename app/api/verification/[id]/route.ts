@@ -28,6 +28,7 @@ type VerificationDoc = {
   rejectionReason?: string | null;
   bmidNumber?: string | null;
   previousBmidNumber?: string | null;
+  approvedAt?: string | null;
   submittedAccounts?: SubmittedAccount[] | null;
 };
 
@@ -139,7 +140,16 @@ async function ensureApprovedUserState(userId: string): Promise<string | null> {
     const userSnap = await tx.get(userRef);
     if (!userSnap.exists) return null;
 
-    const userData = userSnap.data() as { bmidNumber?: unknown; previousBmidNumber?: unknown; verified?: unknown } | undefined;
+    const userData = userSnap.data() as {
+      bmidNumber?: unknown;
+      previousBmidNumber?: unknown;
+      verified?: unknown;
+      bmidVerifiedAt?: unknown;
+    } | undefined;
+    const now = new Date().toISOString();
+    const verifiedAtPatch = userData?.bmidVerifiedAt
+      ? {}
+      : { bmidVerifiedAt: now };
     const existingBmidNumber =
       typeof userData?.bmidNumber === "string" && userData.bmidNumber.trim()
         ? userData.bmidNumber.trim()
@@ -158,7 +168,8 @@ async function ensureApprovedUserState(userId: string): Promise<string | null> {
           bmidNumber: reusableBmidNumber,
           previousBmidNumber: reusableBmidNumber,
           bmidStatus: "active",
-          updatedAt: new Date().toISOString(),
+          ...verifiedAtPatch,
+          updatedAt: now,
         },
         { merge: true }
       );
@@ -185,7 +196,8 @@ async function ensureApprovedUserState(userId: string): Promise<string | null> {
         bmidNumber: newBmidNumber,
         previousBmidNumber: newBmidNumber,
         bmidStatus: "active",
-        updatedAt: new Date().toISOString(),
+        ...verifiedAtPatch,
+        updatedAt: now,
       },
       { merge: true }
     );
@@ -318,8 +330,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     try {
       bmidNumber = await ensureApprovedUserState(fresh.userId);
       if (bmidNumber) {
-        await updateDoc("verificationRequests", id, { bmidNumber });
-        fresh = { ...fresh, bmidNumber } as VerificationDoc;
+        const approvedAt = fresh.approvedAt || new Date().toISOString();
+        await updateDoc("verificationRequests", id, { bmidNumber, approvedAt });
+        fresh = { ...fresh, bmidNumber, approvedAt } as VerificationDoc;
       }
     } catch (e) {
       return error("user_update_failed", 500, { detail: String((e as Error).message) });

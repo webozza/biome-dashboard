@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bell, CheckCircle2, FileText, ShieldAlert, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle2, FileText, Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
 import { auth } from "@/lib/firebase-client";
 import { AuthGate } from "@/components/ui/auth-gate";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -22,10 +22,14 @@ type Summary = {
 
 type Incident = SecurityIncident & { id: string };
 type Review = { id: string; status: string; periodStart: string; periodEnd: string; dueAt: string; reviewerEmail?: string | null; findings?: string };
+type ApiError = Error & {
+  code?: string;
+  retryAfterSeconds?: number;
+};
 
 const tabs = ["Security Events", "Incidents", "Weekly Reviews", "Evidence Export"] as const;
 
-async function authHeaders() {
+async function authHeaders(): Promise<Record<string, string>> {
   const token = await auth.currentUser?.getIdToken();
   return token ? { authorization: `Bearer ${token}` } : {};
 }
@@ -36,7 +40,14 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   if (auth.authorization) headers.set("authorization", auth.authorization);
   const resp = await fetch(url, { ...init, headers });
   const data = await resp.json().catch(() => null);
-  if (!resp.ok) throw new Error(data?.error || "Request failed");
+  if (!resp.ok) {
+    const requestError = new Error(data?.error || "Request failed") as ApiError;
+    requestError.code = data?.error;
+    if (typeof data?.retryAfterSeconds === "number") {
+      requestError.retryAfterSeconds = data.retryAfterSeconds;
+    }
+    throw requestError;
+  }
   return data as T;
 }
 
@@ -54,6 +65,7 @@ export default function PlatformDataMonitoringPage() {
   const [testConfirmation, setTestConfirmation] = useState("");
   const [reviewFindings, setReviewFindings] = useState("No indicators identified");
   const [incidentNotes, setIncidentNotes] = useState<Record<string, string>>({});
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const [checklist, setChecklist] = useState<SecurityReviewChecklist>({
     unauthorizedAuthReviewed: false,
     accessControlReviewed: false,
@@ -87,6 +99,23 @@ export default function PlatformDataMonitoringPage() {
     queryClient.invalidateQueries({ queryKey: ["security-platform-data"] });
   };
 
+  const openEvidencePrintPage = async () => {
+    setEvidenceError(null);
+    const headers = await authHeaders();
+    const resp = await fetch(`/api/security/platform-data/evidence/${encodeURIComponent(latestReviewId)}`, {
+      headers,
+    });
+    const html = await resp.text();
+    if (!resp.ok) {
+      setEvidenceError("Could not open the evidence export. Please refresh the page and try again.");
+      return;
+    }
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
   const testMutation = useMutation({
     mutationFn: () =>
       fetchJson<{ ok: true; event: SecurityAuditEvent; incidentId: string }>("/api/security/platform-data/test-event", {
@@ -99,6 +128,16 @@ export default function PlatformDataMonitoringPage() {
       }),
     onSuccess: invalidate,
   });
+
+  const testEventError = testMutation.error as ApiError | null;
+  const testEventErrorMessage =
+    testEventError?.code === "cooldown_active"
+      ? `A safe test event was already generated. Please wait about ${Math.ceil(
+          (testEventError.retryAfterSeconds || 0) / 60
+        )} minutes before generating another one. Continue using the existing event for evidence.`
+      : testEventError
+        ? testEventError.message
+        : null;
 
   const incidentMutation = useMutation({
     mutationFn: ({ id, status, reviewNotes }: { id: string; status: string; reviewNotes: string }) =>
@@ -138,14 +177,12 @@ export default function PlatformDataMonitoringPage() {
           <h1 className="text-2xl font-black text-main tracking-tight">Platform Data Monitoring</h1>
           <p className="text-sm text-muted">Meta auditlog-22.e.iii security events, incidents, and weekly reviews.</p>
         </div>
-        <a
+        <button
           className="rounded-lg border border-border px-3 py-2 text-sm font-bold text-main hover:bg-surface-hover"
-          href={`/api/security/platform-data/evidence/${encodeURIComponent(latestReviewId)}`}
-          target="_blank"
-          rel="noreferrer"
+          onClick={() => openEvidencePrintPage()}
         >
           Evidence Export
-        </a>
+        </button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -282,11 +319,12 @@ export default function PlatformDataMonitoringPage() {
           <p className="mt-2 text-sm text-muted">Use this only after Google Cloud Logs Explorer, Monitoring incident, notification, incident review, and weekly review are all visible.</p>
           <div className="mt-4 flex flex-wrap gap-3">
             <button
-              className="rounded-lg border border-border px-3 py-2 text-sm font-bold"
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-bold disabled:opacity-60"
               onClick={() => testMutation.mutate()}
               disabled={testMutation.isPending}
             >
-              Generate Safe Test Event
+              {testMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {testMutation.isPending ? "Generating..." : "Generate Safe Test Event"}
             </button>
             <input
               className="min-w-[280px] rounded-lg border border-border bg-surface px-3 py-2 text-sm"
@@ -294,10 +332,24 @@ export default function PlatformDataMonitoringPage() {
               onChange={(event) => setTestConfirmation(event.target.value)}
               placeholder="GENERATE SECURITY TEST EVENT"
             />
-            <a className="rounded-lg bg-primary px-3 py-2 text-sm font-bold text-white" href={`/api/security/platform-data/evidence/${encodeURIComponent(latestReviewId)}`} target="_blank" rel="noreferrer">
+            <button
+              className="rounded-lg bg-primary px-3 py-2 text-sm font-bold text-white"
+              onClick={() => openEvidencePrintPage()}
+            >
               Open Print Page
-            </a>
+            </button>
           </div>
+          {testEventErrorMessage ? (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <p className="font-bold">Safe test event not generated</p>
+              <p>{testEventErrorMessage}</p>
+            </div>
+          ) : null}
+          {evidenceError ? (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+              {evidenceError}
+            </div>
+          ) : null}
           {testMutation.data?.event ? (
             <div className="mt-4 rounded-lg border border-border p-3 text-sm">
               <p><CheckCircle2 className="mr-2 inline h-4 w-4 text-primary" />Safe event created: <span className="font-mono">{testMutation.data.event.eventId}</span></p>

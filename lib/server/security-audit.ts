@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { google } from "googleapis";
 import { admin, db } from "./firebase";
 import type {
   SecurityAuditCategory,
@@ -27,11 +28,22 @@ export const TOKEN_VALUE_PATTERN =
   /(Bearer\s+[A-Za-z0-9._-]+|EA[A-Za-z0-9]{20,}|ya29\.[A-Za-z0-9._-]+|AIza[0-9A-Za-z_-]{20,})/;
 
 function environment(): "production" | "staging" {
+  if (process.env.SECURITY_AUDIT_ENVIRONMENT === "production") return "production";
+  if (process.env.SECURITY_AUDIT_ENVIRONMENT === "staging") return "staging";
   return process.env.NODE_ENV === "production" ? "production" : "staging";
 }
 
 function auditHashKey(): string {
   return process.env.SECURITY_AUDIT_HASH_KEY || process.env.GOOGLE_CLOUD_PROJECT || "local-security-audit-key";
+}
+
+function googleCloudProjectId(): string {
+  return (
+    process.env.GOOGLE_CLOUD_PROJECT ||
+    process.env.GCLOUD_PROJECT ||
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
+    "project-v-f2d15"
+  );
 }
 
 export function hashAuditIdentifier(value: string | null | undefined): string | undefined {
@@ -102,6 +114,12 @@ export async function writeSecurityAuditEvent(input: SecurityAuditInput): Promis
     "jsonPayload.schema": event.schema,
   };
   console.log(JSON.stringify(logEntry));
+  await writeGoogleCloudLogEntry(event).catch((error) => {
+    console.error("[security-audit] failed to write Google Cloud Logging entry", {
+      eventId: event.eventId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
   await db()
     .collection("securityAuditEvents")
     .doc(event.eventId)
@@ -113,6 +131,35 @@ export async function writeSecurityAuditEvent(input: SecurityAuditInput): Promis
       note: "Sanitized review index for Meta auditlog-22.e.iii. No tokens, secrets, raw Platform Data, emails, names, captions, or media URLs are stored.",
     });
   return event;
+}
+
+async function writeGoogleCloudLogEntry(event: SecurityAuditEvent) {
+  const projectId = googleCloudProjectId();
+  const auth = new google.auth.GoogleAuth({
+    scopes: ["https://www.googleapis.com/auth/logging.write"],
+  });
+  const logging = google.logging({ version: "v2", auth });
+  await logging.entries.write({
+    requestBody: {
+      logName: `projects/${projectId}/logs/biome_security_audit`,
+      resource: {
+        type: "global",
+        labels: {
+          project_id: projectId,
+        },
+      },
+      entries: [
+        {
+          severity: event.severity,
+          timestamp: event.occurredAt,
+          jsonPayload: {
+            message: "biome_security_audit_event",
+            ...event,
+          },
+        },
+      ],
+    },
+  });
 }
 
 export function categoryForEventType(eventType: SecurityAuditEventType): SecurityAuditCategory {

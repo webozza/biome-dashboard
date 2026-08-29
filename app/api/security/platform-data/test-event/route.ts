@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
     .orderBy("createdAt", "desc")
     .limit(1)
     .get();
-  const lastCreatedAt = recent.docs[0]?.data()?.createdAt;
+  const lastEvent = recent.docs[0]?.data();
+  const lastCreatedAt = lastEvent?.environment === "production" ? lastEvent?.createdAt : null;
   const lastMillis =
     lastCreatedAt && typeof lastCreatedAt.toMillis === "function" ? lastCreatedAt.toMillis() : 0;
   if (lastMillis && Date.now() - lastMillis < cooldown) {

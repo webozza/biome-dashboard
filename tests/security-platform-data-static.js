@@ -77,6 +77,15 @@ const checks = [
       evidenceRoute.includes("Redaction check") &&
       evidenceRoute.includes("actual alert output"),
   },
+  {
+    name: "Safe test event UI shows loading and friendly cooldown guidance",
+    pass:
+      page.includes("Generating...") &&
+      page.includes("safe test event was already generated") &&
+      page.includes("retryAfterSeconds") &&
+      page.includes("Math.ceil") &&
+      !page.includes("alert(error instanceof Error ? error.message : String(error))"),
+  },
 ];
 
 let failed = false;

@@ -37,6 +37,9 @@ export interface ResolvedPublicBmidProfile {
   photoUrl: string;
   bio: string;
   tags: string[];
+  postsCount: number;
+  followersCount: number;
+  followingCount: number;
   bmidNumber: string;
   bmidVerifiedAt: string | null;
   socials: PublicProfileSocial[];
@@ -211,6 +214,45 @@ function publicCount(value: unknown): number {
   return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
 }
 
+function maybePublicCount(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const count = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(count) && count >= 0 ? Math.floor(count) : null;
+}
+
+async function countUserSubcollection(
+  uid: string,
+  name: "posts" | "followers" | "following"
+): Promise<number> {
+  const snap = await db().collection("users").doc(uid).collection(name).get();
+  return snap.size;
+}
+
+async function loadPublicProfileStats(
+  uid: string,
+  user: AnyRecord
+): Promise<Pick<ResolvedPublicBmidProfile, "postsCount" | "followersCount" | "followingCount">> {
+  const directPosts = maybePublicCount(user.postsCount ?? user.postCount ?? user.totalPosts);
+  const directFollowers = maybePublicCount(
+    user.followersCount ?? user.followerCount ?? user.totalFollowers
+  );
+  const directFollowing = maybePublicCount(
+    user.followingCount ?? user.following ?? user.totalFollowing
+  );
+
+  const [postsCount, followersCount, followingCount] = await Promise.all([
+    directPosts ?? countUserSubcollection(uid, "posts"),
+    directFollowers ?? countUserSubcollection(uid, "followers"),
+    directFollowing ?? countUserSubcollection(uid, "following"),
+  ]);
+
+  return {
+    postsCount: publicCount(postsCount),
+    followersCount: publicCount(followersCount),
+    followingCount: publicCount(followingCount),
+  };
+}
+
 async function loadHighlightedPosts(uid: string): Promise<PublicPortfolioItem[]> {
   const snap = await db()
     .collection("users")
@@ -306,6 +348,9 @@ async function loadApprovedContent(uid: string): Promise<PublicPortfolioItem[]> 
         ? `/p/${encodeURIComponent(authorId)}/${encodeURIComponent(postId)}`
         : "",
       createdAt: portfolioDate(data.createdAt),
+      viewCount: publicCount(data.viewCount ?? data.viewsCount ?? data.views),
+      likesCount: publicCount(data.likesCount ?? data.likeCount ?? data.likes),
+      commentsCount: publicCount(data.commentsCount ?? data.commentCount ?? data.comments),
     }];
   });
 }
@@ -397,8 +442,9 @@ export async function resolvePublicBmidProfileResult(
     loadHighlightedVibes(userDoc.id),
     loadApprovedContent(userDoc.id),
     loadApprovedBox(userDoc.id),
+    loadPublicProfileStats(userDoc.id, user),
   ]);
-  const [highlightedPosts, highlightedVibes, approvedContent, approvedBox] = portfolioGroups;
+  const [highlightedPosts, highlightedVibes, approvedContent, approvedBox, profileStats] = portfolioGroups;
   const portfolio = [...highlightedPosts, ...highlightedVibes]
     .sort((a, b) => portfolioSortValue(b) - portfolioSortValue(a))
     .slice(0, 6);
@@ -422,6 +468,7 @@ export async function resolvePublicBmidProfileResult(
       photoUrl: safeHttpUrl(user.photoURL),
       bio: cleanText(user.bio, 600),
       tags,
+      ...profileStats,
       bmidNumber: normalizeBmidIdentifier(user.bmidNumber),
       bmidVerifiedAt: isoTimestamp(user.bmidVerifiedAt),
       socials: publicSocials(user),

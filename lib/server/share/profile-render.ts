@@ -54,11 +54,19 @@ function formatCount(value?: number): string {
 }
 
 function portfolioMetaHtml(item: PublicPortfolioItem): string {
-  if (item.kind !== "post" && item.kind !== "vibe") return "";
+  if (item.kind === "box") return "";
   return `<div class="work-meta" aria-label="Post engagement">
       <span class="work-stat"><strong>${formatCount(item.viewCount)}</strong> Views</span>
       <span class="work-stat"><strong>${formatCount(item.likesCount)}</strong> Likes</span>
       <span class="work-stat"><strong>${formatCount(item.commentsCount)}</strong> Comments</span>
+    </div>`;
+}
+
+function profileStatsHtml(profile: ResolvedPublicBmidProfile): string {
+  return `<div class="profile-stats" aria-label="Creator profile stats">
+      <span class="profile-stat"><strong>${formatCount(profile.postsCount)}</strong> Posts</span>
+      <span class="profile-stat"><strong>${formatCount(profile.followersCount)}</strong> Followers</span>
+      <span class="profile-stat"><strong>${formatCount(profile.followingCount)}</strong> Following</span>
     </div>`;
 }
 
@@ -162,6 +170,9 @@ export function renderPublicBmidProfile(args: {
     .identity{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
     .identity-pill{display:flex;align-items:center;gap:8px;background:rgba(14,29,17,.24);border:1px solid rgba(255,255,255,.17);border-radius:15px;padding:11px 14px;font-size:13px;color:rgba(255,255,255,.76)}
     .identity-pill strong{color:#fff;letter-spacing:.035em}
+    .profile-stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+    .profile-stat{display:inline-flex;align-items:baseline;gap:7px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.12);border-radius:15px;padding:11px 14px;color:rgba(255,255,255,.78);font-size:13px;font-weight:800;backdrop-filter:blur(14px)}
+    .profile-stat strong{color:#fff;font-size:18px;font-weight:950;letter-spacing:-.02em}
     .portrait-wrap{position:relative;display:flex;justify-content:center;align-items:center;min-height:390px}
     .portrait-ring{position:absolute;width:min(390px,100%);aspect-ratio:1;border:1px solid rgba(255,255,255,.19);border-radius:50%;box-shadow:inset 0 0 0 30px rgba(255,255,255,.03)}
     .portrait{position:relative;width:min(310px,82%);aspect-ratio:1;border-radius:42% 42% 48% 48%;overflow:hidden;background:linear-gradient(145deg,#d9ebcc,#9ac27c);border:8px solid rgba(255,255,255,.16);box-shadow:0 36px 90px rgba(8,24,10,.34)}
@@ -255,6 +266,7 @@ export function renderPublicBmidProfile(args: {
               <span class="identity-pill">Status <strong>Verified</strong></span>
               ${memberSince ? `<span class="identity-pill">Member since <strong>${escapeHtml(memberSince)}</strong></span>` : ""}
             </div>
+            ${profileStatsHtml(profile)}
           </div>
           <div class="portrait-wrap">
             <div class="portrait-ring"></div>

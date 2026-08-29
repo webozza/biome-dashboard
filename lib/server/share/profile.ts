@@ -240,16 +240,48 @@ async function loadPublicProfileStats(
     user.followingCount ?? user.following ?? user.totalFollowing
   );
 
-  const [postsCount, followersCount, followingCount] = await Promise.all([
-    directPosts ?? countUserSubcollection(uid, "posts"),
-    directFollowers ?? countUserSubcollection(uid, "followers"),
-    directFollowing ?? countUserSubcollection(uid, "following"),
+  const [countedPosts, countedFollowers, countedFollowing] = await Promise.all([
+    countUserSubcollection(uid, "posts"),
+    countUserSubcollection(uid, "followers"),
+    countUserSubcollection(uid, "following"),
   ]);
 
   return {
-    postsCount: publicCount(postsCount),
-    followersCount: publicCount(followersCount),
-    followingCount: publicCount(followingCount),
+    postsCount: publicCount(Math.max(directPosts ?? 0, countedPosts)),
+    followersCount: publicCount(Math.max(directFollowers ?? 0, countedFollowers)),
+    followingCount: publicCount(Math.max(directFollowing ?? 0, countedFollowing)),
+  };
+}
+
+async function loadPostEngagement(
+  authorId: string,
+  postId: string,
+  fallback: AnyRecord
+): Promise<Pick<PublicPortfolioItem, "viewCount" | "likesCount" | "commentsCount">> {
+  let post: AnyRecord = {};
+  if (authorId && postId) {
+    const postDoc = await db()
+      .collection("users")
+      .doc(authorId)
+      .collection("posts")
+      .doc(postId)
+      .get();
+    post = postDoc.exists ? (postDoc.data() as AnyRecord) : {};
+  }
+
+  return {
+    viewCount: publicCount(
+      fallback.viewCount ?? fallback.viewsCount ?? fallback.views ??
+      post.viewCount ?? post.viewsCount ?? post.views
+    ),
+    likesCount: publicCount(
+      fallback.likesCount ?? fallback.likeCount ?? fallback.likes ??
+      post.likesCount ?? post.likeCount ?? post.likes
+    ),
+    commentsCount: publicCount(
+      fallback.commentsCount ?? fallback.commentCount ?? fallback.comments ??
+      post.commentsCount ?? post.commentCount ?? post.comments
+    ),
   };
 }
 
@@ -327,9 +359,9 @@ async function loadApprovedContent(uid: string): Promise<PublicPortfolioItem[]> 
     .limit(50)
     .get();
 
-  return snap.docs.flatMap((doc) => {
+  const items = await Promise.all(snap.docs.map(async (doc): Promise<PublicPortfolioItem | null> => {
     const data = doc.data() as AnyRecord;
-    if (!isVisibleContent(data)) return [];
+    if (!isVisibleContent(data)) return null;
     const postId = cleanText(data.postId || data.publishedPostId, 200);
     const authorId = cleanText(data.userId || data.authorId, 200) || uid;
     const title = cleanText(data.postTitle || data.title, 120) || "Verified creator content";
@@ -337,7 +369,8 @@ async function loadApprovedContent(uid: string): Promise<PublicPortfolioItem[]> 
     const imageUrl = safeHttpUrl(
       data.postImageUrl || pickFirstImage(data) || pickVideoThumbnail(data)
     );
-    return [{
+    const engagement = await loadPostEngagement(authorId, postId, data);
+    return {
       id: `content-${doc.id}`,
       kind: "content" as const,
       eyebrow: "BMID Content",
@@ -348,11 +381,11 @@ async function loadApprovedContent(uid: string): Promise<PublicPortfolioItem[]> 
         ? `/p/${encodeURIComponent(authorId)}/${encodeURIComponent(postId)}`
         : "",
       createdAt: portfolioDate(data.createdAt),
-      viewCount: publicCount(data.viewCount ?? data.viewsCount ?? data.views),
-      likesCount: publicCount(data.likesCount ?? data.likeCount ?? data.likes),
-      commentsCount: publicCount(data.commentsCount ?? data.commentCount ?? data.comments),
-    }];
-  });
+      ...engagement,
+    };
+  }));
+
+  return items.filter((item): item is PublicPortfolioItem => Boolean(item));
 }
 
 function isVisibleBox(data: AnyRecord): boolean {

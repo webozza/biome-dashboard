@@ -94,6 +94,30 @@ const checks = [
     name: "Apple universal-link association includes public BMID profiles",
     pass: /\/bmid\/\*/.test(appleLinks) && /Public BMID profile links/.test(appleLinks),
   },
+  {
+    name: "public BMID content resolves engagement from linked post docs",
+    pass:
+      /loadPostEngagement/.test(resolver) &&
+      /viewCount: publicCount/.test(resolver) &&
+      /likesCount: publicCount/.test(resolver) &&
+      /commentsCount: publicCount/.test(resolver) &&
+      /item\.kind === "box"/.test(renderer) &&
+      /Views/.test(renderer) &&
+      /Likes/.test(renderer) &&
+      /Comments/.test(renderer),
+  },
+  {
+    name: "public BMID profile prefers real collection counts over stale zero counters",
+    pass:
+      /postsCount: number/.test(resolver) &&
+      /followersCount: number/.test(resolver) &&
+      /followingCount: number/.test(resolver) &&
+      /loadPublicProfileStats/.test(resolver) &&
+      /Math\.max\(directPosts \?\? 0, countedPosts\)/.test(resolver) &&
+      /profile-stats/.test(renderer) &&
+      /Followers/.test(renderer) &&
+      /Following/.test(renderer),
+  },
 ];
 
 const failed = checks.filter((check) => !check.pass);

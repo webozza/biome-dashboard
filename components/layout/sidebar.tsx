@@ -47,6 +47,12 @@ const navSections = [
     ],
   },
   {
+    label: "Security",
+    items: [
+      { href: "/dashboard/security/platform-data", label: "Platform Data Monitoring", icon: ShieldCheck },
+    ],
+  },
+  {
     label: "System",
     items: [
       { href: "/dashboard/audit", label: "Audit Logs", icon: ScrollText },

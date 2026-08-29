@@ -25,6 +25,9 @@ export interface PublicPortfolioItem {
   imageUrl: string;
   href: string;
   createdAt: string | null;
+  viewCount?: number;
+  likesCount?: number;
+  commentsCount?: number;
 }
 
 export interface ResolvedPublicBmidProfile {
@@ -203,6 +206,11 @@ function portfolioSortValue(item: PublicPortfolioItem): number {
   return item.createdAt ? Date.parse(item.createdAt) || 0 : 0;
 }
 
+function publicCount(value: unknown): number {
+  const count = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+}
+
 async function loadHighlightedPosts(uid: string): Promise<PublicPortfolioItem[]> {
   const snap = await db()
     .collection("users")
@@ -227,6 +235,9 @@ async function loadHighlightedPosts(uid: string): Promise<PublicPortfolioItem[]>
         imageUrl,
         href: `/p/${encodeURIComponent(uid)}/${encodeURIComponent(doc.id)}`,
         createdAt: portfolioDate(data.highlightedAt || data.createdAt),
+        viewCount: publicCount(data.viewCount ?? data.viewsCount ?? data.views),
+        likesCount: publicCount(data.likesCount ?? data.likeCount ?? data.likes),
+        commentsCount: publicCount(data.commentsCount ?? data.commentCount ?? data.comments),
       }];
     });
 }
@@ -254,6 +265,9 @@ async function loadHighlightedVibes(uid: string): Promise<PublicPortfolioItem[]>
       imageUrl,
       href: `/r/${encodeURIComponent(uid)}/${encodeURIComponent(doc.id)}`,
       createdAt: portfolioDate(data.highlightedAt || data.createdAt),
+      viewCount: publicCount(data.viewCount ?? data.viewsCount ?? data.views),
+      likesCount: publicCount(data.likesCount ?? data.likeCount ?? data.likes),
+      commentsCount: publicCount(data.commentsCount ?? data.commentCount ?? data.comments),
     }];
   });
 }

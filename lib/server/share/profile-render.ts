@@ -46,6 +46,22 @@ function socialHtml(social: PublicProfileSocial): string {
   </a>`;
 }
 
+function formatCount(value?: number): string {
+  const count = Number.isFinite(value ?? NaN) ? Math.max(0, Math.floor(value as number)) : 0;
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(count >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(count >= 10_000 ? 0 : 1).replace(/\.0$/, "")}K`;
+  return String(count);
+}
+
+function portfolioMetaHtml(item: PublicPortfolioItem): string {
+  if (item.kind !== "post" && item.kind !== "vibe") return "";
+  return `<div class="work-meta" aria-label="Post engagement">
+      <span class="work-stat"><strong>${formatCount(item.viewCount)}</strong> Views</span>
+      <span class="work-stat"><strong>${formatCount(item.likesCount)}</strong> Likes</span>
+      <span class="work-stat"><strong>${formatCount(item.commentsCount)}</strong> Comments</span>
+    </div>`;
+}
+
 function portfolioHtml(item: PublicPortfolioItem, pageUrl: string): string {
   const href = item.href ? makeAbsoluteUrl(item.href, new URL(pageUrl).origin) : "";
   const media = item.imageUrl
@@ -59,6 +75,7 @@ function portfolioHtml(item: PublicPortfolioItem, pageUrl: string): string {
     <div class="work-copy">
       <h3>${escapeHtml(item.title)}</h3>
       ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}
+      ${portfolioMetaHtml(item)}
       ${href ? `<span class="work-view">View work <span aria-hidden="true">↗</span></span>` : ""}
     </div>`;
   return href
@@ -177,6 +194,9 @@ export function renderPublicBmidProfile(args: {
     .work-copy{padding:20px;display:flex;flex-direction:column;flex:1}
     .work-copy h3{font-size:20px;line-height:1.25;letter-spacing:-.025em;margin:0}
     .work-copy p{font-size:13px;line-height:1.6;color:var(--soft);margin:10px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+    .work-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+    .work-stat{display:inline-flex;align-items:center;gap:5px;border:1px solid rgba(63,108,50,.13);background:rgba(238,247,233,.78);border-radius:999px;padding:7px 9px;color:#667268;font-size:11px;font-weight:800;line-height:1}
+    .work-stat strong{color:var(--green-dark);font-weight:950}
     .work-view{font-size:12px;font-weight:850;color:var(--green-dark);margin-top:auto;padding-top:18px}
     .verification-section{padding-top:72px}
     .verification-section .kicker{display:inline-flex;align-items:center;gap:8px}.verification-section .kicker::before{content:"✓";width:22px;height:22px;display:grid;place-items:center;border-radius:8px;background:var(--mint);font-size:11px}

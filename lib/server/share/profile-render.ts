@@ -38,6 +38,18 @@ function socialIcon(platform: PublicProfileSocial["platform"]): string {
   return "X";
 }
 
+function socialStatsHtml(social: PublicProfileSocial): string {
+  if (!social.stats?.length) return "";
+  return `<span class="social-stats" aria-label="${escapeHtml(social.label)} stats">
+      ${social.stats
+        .map(
+          (stat) =>
+            `<span><strong>${formatCount(stat.value)}</strong> ${escapeHtml(stat.label)}</span>`
+        )
+        .join("")}
+    </span>`;
+}
+
 function socialHtml(social: PublicProfileSocial): string {
   const safeImage = escapeHtml(social.imageUrl || "");
   const safeName = escapeHtml(social.accountName || social.label);
@@ -51,13 +63,15 @@ function socialHtml(social: PublicProfileSocial): string {
       <span class="social-platform">${escapeHtml(social.label)}</span>
       <strong>${safeName}</strong>
       <small>${safeHandle}</small>
+      ${socialStatsHtml(social)}
     </span>
     <span class="arrow" aria-hidden="true">↗</span>
   </a>`;
 }
 
-function formatCount(value?: number): string {
-  const count = Number.isFinite(value ?? NaN) ? Math.max(0, Math.floor(value as number)) : 0;
+function formatCount(value?: number | string | null): string {
+  const parsed = typeof value === "string" ? Number(value) : value;
+  const count = Number.isFinite(parsed ?? NaN) ? Math.max(0, Math.floor(parsed as number)) : 0;
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(count >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(count >= 10_000 ? 0 : 1).replace(/\.0$/, "")}K`;
   return String(count);
@@ -205,6 +219,9 @@ export function renderPublicBmidProfile(args: {
     .social-platform{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--green-dark);font-weight:900}
     .social-copy strong{min-width:0;font-size:15px;line-height:1.15;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .social-copy small{min-width:0;font-size:12px;line-height:1.2;color:var(--soft);font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .social-stats{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
+    .social-stats span{display:inline-flex;align-items:center;gap:4px;border:1px solid rgba(63,108,50,.12);background:rgba(238,247,233,.78);border-radius:999px;padding:5px 7px;color:#667268;font-size:10px;font-weight:850;line-height:1}
+    .social-stats strong{color:var(--green-dark);font-size:10px;font-weight:950}
     .social-icon{width:36px;height:36px;border-radius:12px;background:var(--mint);display:grid;place-items:center;color:var(--green-dark);font-weight:900}
     .social-youtube .social-icon{color:#d93434;background:#fff0f0}.social-facebook .social-icon{color:#2869bd;background:#edf5ff}.social-instagram .social-icon{color:#bb3c76;background:#fff0f6}.social-tiktok .social-icon{color:#161616;background:#f1f1f1}
     .arrow{margin-left:auto;color:#89928a}

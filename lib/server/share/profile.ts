@@ -17,6 +17,12 @@ export interface PublicProfileSocial {
   accountName?: string;
   accountHandle?: string;
   imageUrl?: string;
+  stats?: PublicProfileSocialStat[];
+}
+
+export interface PublicProfileSocialStat {
+  label: string;
+  value: string;
 }
 
 export interface PublicPortfolioItem {
@@ -166,6 +172,26 @@ function handleFromUrl(value: string): string {
   }
 }
 
+function socialStatValue(value: unknown): string {
+  const raw = cleanText(value, 40);
+  return /^\d+$/.test(raw) ? raw : "";
+}
+
+function publicSocialStats(
+  platform: PublicSocialPlatform,
+  connection: AnyRecord
+): PublicProfileSocialStat[] {
+  if (platform !== "youtube") return [];
+  const stats: PublicProfileSocialStat[] = [];
+  const subscriberCount = socialStatValue(connection.subscriberCount);
+  const videoCount = socialStatValue(connection.videoCount);
+  if (subscriberCount && connection.hiddenSubscriberCount !== true) {
+    stats.push({ label: "Subscribers", value: subscriberCount });
+  }
+  if (videoCount) stats.push({ label: "Videos", value: videoCount });
+  return stats;
+}
+
 function publicSocials(user: AnyRecord): PublicProfileSocial[] {
   const socials =
     user.socials && typeof user.socials === "object"
@@ -202,6 +228,7 @@ function publicSocials(user: AnyRecord): PublicProfileSocial[] {
       connection.thumbnailUrl ||
       connection.photoUrl
     );
+    const stats = publicSocialStats(platform.platform, connection);
     return url
       ? [{
         platform: platform.platform,
@@ -210,6 +237,7 @@ function publicSocials(user: AnyRecord): PublicProfileSocial[] {
         accountName: connectionDisplayName || connectionHandle || undefined,
         accountHandle: connectionHandle || undefined,
         imageUrl: imageUrl || undefined,
+        stats: stats.length ? stats : undefined,
       }]
       : [];
   });

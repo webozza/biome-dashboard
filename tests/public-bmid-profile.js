@@ -124,10 +124,13 @@ const checks = [
       /accountName\?: string/.test(resolver) &&
       /accountHandle\?: string/.test(resolver) &&
       /imageUrl\?: string/.test(resolver) &&
+      /stats\?: PublicProfileSocialStat\[\]/.test(resolver) &&
       /connectionDisplayName/.test(resolver) &&
       /connection\.cachedAvatarUrl/.test(resolver) &&
+      /subscriberCount/.test(resolver) &&
       /social-avatar/.test(renderer) &&
       /social-copy/.test(renderer) &&
+      /social-stats/.test(renderer) &&
       /target="_blank"/.test(renderer),
   },
 ];

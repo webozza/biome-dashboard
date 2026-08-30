@@ -125,6 +125,7 @@ const checks = [
       /accountHandle\?: string/.test(resolver) &&
       /imageUrl\?: string/.test(resolver) &&
       /connectionDisplayName/.test(resolver) &&
+      /connection\.cachedAvatarUrl/.test(resolver) &&
       /social-avatar/.test(renderer) &&
       /social-copy/.test(renderer) &&
       /target="_blank"/.test(renderer),

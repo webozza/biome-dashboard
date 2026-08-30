@@ -197,7 +197,10 @@ function publicSocials(user: AnyRecord): PublicProfileSocial[] {
       100
     ).replace(/^@+/, "");
     const imageUrl = safeHttpUrl(
-      connection.avatarUrl || connection.thumbnailUrl || connection.photoUrl
+      connection.cachedAvatarUrl ||
+      connection.avatarUrl ||
+      connection.thumbnailUrl ||
+      connection.photoUrl
     );
     return url
       ? [{

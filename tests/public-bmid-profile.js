@@ -118,6 +118,17 @@ const checks = [
       /Followers/.test(renderer) &&
       /Following/.test(renderer),
   },
+  {
+    name: "connected social cards expose stored profile identity and remain linked",
+    pass:
+      /accountName\?: string/.test(resolver) &&
+      /accountHandle\?: string/.test(resolver) &&
+      /imageUrl\?: string/.test(resolver) &&
+      /connectionDisplayName/.test(resolver) &&
+      /social-avatar/.test(renderer) &&
+      /social-copy/.test(renderer) &&
+      /target="_blank"/.test(renderer),
+  },
 ];
 
 const failed = checks.filter((check) => !check.pass);

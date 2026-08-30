@@ -14,6 +14,9 @@ export interface PublicProfileSocial {
   platform: PublicSocialPlatform;
   label: string;
   url: string;
+  accountName?: string;
+  accountHandle?: string;
+  imageUrl?: string;
 }
 
 export interface PublicPortfolioItem {
@@ -153,6 +156,16 @@ function socialUrl(
   return handle ? platform.fromHandle(handle) : "";
 }
 
+function handleFromUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    const path = url.pathname.split("/").filter(Boolean)[0] || "";
+    return path.replace(/^@+/, "").slice(0, 100);
+  } catch {
+    return "";
+  }
+}
+
 function publicSocials(user: AnyRecord): PublicProfileSocial[] {
   const socials =
     user.socials && typeof user.socials === "object"
@@ -175,7 +188,27 @@ function publicSocials(user: AnyRecord): PublicProfileSocial[] {
     const url =
       socialUrl(socials[platform.platform], platform) ||
       socialUrl(connectedUrl, platform);
-    return url ? [{ platform: platform.platform, label: platform.label, url }] : [];
+    const connectionDisplayName = cleanText(
+      connection.displayName || connection.title || connection.name,
+      100
+    );
+    const connectionHandle = cleanText(
+      connection.username || connection.handle || handleFromUrl(url),
+      100
+    ).replace(/^@+/, "");
+    const imageUrl = safeHttpUrl(
+      connection.avatarUrl || connection.thumbnailUrl || connection.photoUrl
+    );
+    return url
+      ? [{
+        platform: platform.platform,
+        label: platform.label,
+        url,
+        accountName: connectionDisplayName || connectionHandle || undefined,
+        accountHandle: connectionHandle || undefined,
+        imageUrl: imageUrl || undefined,
+      }]
+      : [];
   });
 }
 

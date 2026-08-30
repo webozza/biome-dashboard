@@ -39,9 +39,19 @@ function socialIcon(platform: PublicProfileSocial["platform"]): string {
 }
 
 function socialHtml(social: PublicProfileSocial): string {
+  const safeImage = escapeHtml(social.imageUrl || "");
+  const safeName = escapeHtml(social.accountName || social.label);
+  const safeHandle = escapeHtml(social.accountHandle ? `@${social.accountHandle}` : social.url);
   return `<a class="social-link social-${escapeHtml(social.platform)}" href="${escapeHtml(social.url)}" target="_blank" rel="noopener noreferrer">
-    <span class="social-icon" aria-hidden="true">${socialIcon(social.platform)}</span>
-    <span>${escapeHtml(social.label)}</span>
+    <span class="social-avatar" aria-hidden="true">
+      ${safeImage ? `<img src="${safeImage}" alt="" loading="lazy" onerror="this.remove();this.nextElementSibling.style.display='grid'"/>` : ""}
+      <span class="social-icon" ${safeImage ? `style="display:none"` : ""}>${socialIcon(social.platform)}</span>
+    </span>
+    <span class="social-copy">
+      <span class="social-platform">${escapeHtml(social.label)}</span>
+      <strong>${safeName}</strong>
+      <small>${safeHandle}</small>
+    </span>
     <span class="arrow" aria-hidden="true">↗</span>
   </a>`;
 }
@@ -189,6 +199,12 @@ export function renderPublicBmidProfile(args: {
     .social-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
     .social-link{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.76);backdrop-filter:blur(15px);border:1px solid var(--line);border-radius:18px;padding:17px;text-decoration:none;font-weight:800;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
     .social-link:hover{transform:translateY(-3px);box-shadow:0 18px 40px rgba(47,79,41,.11);border-color:rgba(76,126,62,.27)}
+    .social-avatar{width:42px;height:42px;border-radius:14px;background:var(--mint);overflow:hidden;display:grid;place-items:center;flex:0 0 auto}
+    .social-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+    .social-copy{min-width:0;display:grid;gap:3px}
+    .social-platform{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--green-dark);font-weight:900}
+    .social-copy strong{min-width:0;font-size:15px;line-height:1.15;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .social-copy small{min-width:0;font-size:12px;line-height:1.2;color:var(--soft);font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .social-icon{width:36px;height:36px;border-radius:12px;background:var(--mint);display:grid;place-items:center;color:var(--green-dark);font-weight:900}
     .social-youtube .social-icon{color:#d93434;background:#fff0f0}.social-facebook .social-icon{color:#2869bd;background:#edf5ff}.social-instagram .social-icon{color:#bb3c76;background:#fff0f6}.social-tiktok .social-icon{color:#161616;background:#f1f1f1}
     .arrow{margin-left:auto;color:#89928a}

@@ -57,6 +57,13 @@ export async function POST(req: NextRequest) {
   const linkedIncidentIds = Array.isArray(body?.linkedIncidentIds)
     ? body.linkedIncidentIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
     : [];
+  const eventCountSnapshot = await db()
+    .collection(SECURITY_COLLECTIONS.events)
+    .where("occurredAt", ">=", periodStart)
+    .where("occurredAt", "<=", periodEnd)
+    .count()
+    .get();
+  const eventCount = eventCountSnapshot.data().count;
   const id = `weekly-${periodEnd.slice(0, 10)}`;
   const now = admin.firestore.FieldValue.serverTimestamp();
   const review = {
@@ -67,7 +74,7 @@ export async function POST(req: NextRequest) {
     reviewerUid: auth.user.uid,
     reviewerEmail: auth.user.email,
     checklist,
-    eventCount: 0,
+    eventCount,
     incidentCount: linkedIncidentIds.length,
     findings,
     linkedIncidentIds,

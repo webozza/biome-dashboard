@@ -69,7 +69,8 @@ const checks = [
       incidentsPatchRoute.includes("appendSecurityActivity") &&
       incidentsPatchRoute.includes("serverTimestamp") &&
       reviewsRoute.includes("SECURITY_COLLECTIONS.reviews") &&
-      reviewsRoute.includes("allFourMetaCategoriesReviewed"),
+      reviewsRoute.includes("allFourMetaCategoriesReviewed") &&
+      reviewsRoute.includes("eventCountSnapshot.data().count"),
   },
   {
     name: "Evidence export route is print-ready and redaction-oriented",

@@ -16,6 +16,9 @@ codex.md
 # testing
 /coverage
 
+# generated codebase analysis
+/graphify-out/
+
 # next.js
 /.next/
 /out/

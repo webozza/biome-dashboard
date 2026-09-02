@@ -17,6 +17,7 @@ const testEventRoute = read("app/api/security/platform-data/test-event/route.ts"
 const incidentsPatchRoute = read("app/api/security/platform-data/incidents/[id]/route.ts");
 const reviewsRoute = read("app/api/security/platform-data/reviews/route.ts");
 const evidenceRoute = read("app/api/security/platform-data/evidence/[reviewId]/route.ts");
+const platformDataStore = read("lib/server/security-platform-data.ts");
 
 const checks = [
   {
@@ -76,6 +77,12 @@ const checks = [
       evidenceRoute.includes("window.print") &&
       evidenceRoute.includes("Redaction check") &&
       evidenceRoute.includes("actual alert output"),
+  },
+  {
+    name: "Security document serialization preserves numeric counters",
+    pass:
+      platformDataStore.includes("serialized[key] = toIso(value) || value") &&
+      !platformDataStore.includes('typeof value === "number"'),
   },
   {
     name: "Safe test event UI shows loading and friendly cooldown guidance",

@@ -17,7 +17,6 @@ export function toIso(value: unknown): string {
   if (!value) return "";
   if (typeof value === "string") return value;
   if (value instanceof Date) return value.toISOString();
-  if (typeof value === "number") return new Date(value).toISOString();
   if (
     typeof value === "object" &&
     value &&
